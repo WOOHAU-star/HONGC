@@ -34,7 +34,7 @@ def save_db():
 # ==========================================
 # 2. 테마 및 UI 스타일 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V42.0 - Fixed Engine", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="APEX V43.0 - Perfect Minimalist", layout="wide", page_icon="⚖️")
 
 if 'db_loaded' not in st.session_state:
     db_data = load_db()
@@ -72,9 +72,11 @@ st.markdown(f"""
     .neon-box {{ padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 2px solid #00e676; text-align: center; animation: neon 1.5s infinite alternate; font-size: 18px; font-weight: 800; margin-bottom: 20px; }}
     
     div[role="radiogroup"] {{ justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; background: transparent; border: none; }}
+    
+    /* [수정] 160초(1/2 속도) 초저속 무중력 롤링 티커 */
     @keyframes ticker {{ 0% {{ transform: translateX(50%); }} 100% {{ transform: translateX(-150%); }} }}
     .ticker-wrap {{ width: 100%; overflow: hidden; background: transparent; padding: 5px 0; margin-top: 5px; margin-bottom: 15px; border: none; }}
-    .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 80s linear infinite; font-size: 14px; font-weight: 700; }}
+    .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 160s linear infinite; font-size: 14px; font-weight: 700; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -171,7 +173,7 @@ def reset_paper_trades():
     st.rerun()
 
 # ==========================================
-# 5. 순수 래리 윌리엄스 엔진 (에러 완벽 차단 & 문법 오류 수정)
+# 5. 순수 래리 윌리엄스 엔진 (에러 완벽 차단)
 # ==========================================
 @st.cache_data(ttl=60) 
 def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
@@ -192,7 +194,7 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             df['L-PC'] = abs(df['Low'] - df['Close'].shift(1))
             atr_14 = df[['H-L', 'H-PC', 'L-PC']].max(axis=1).rolling(14).mean().iloc[-1]
             
-            # 안전한 수식 연산을 위해 0으로 나누기 방지
+            # 안전한 수식 연산 (0 나누기 방지)
             df['High_14'] = df['High'].rolling(14).max()
             df['Low_14'] = df['Low'].rolling(14).min()
             denom = df['High_14'] - df['Low_14']
@@ -232,8 +234,6 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
 
             is_nr4 = (yest['High'] - yest['Low']) <= (df['High'].iloc[-5:-1] - df['Low'].iloc[-5:-1]).min()
             is_oops = (today['Open'] < yest['Low']) and (current > yest['Low'])
-            
-            # [오류 해결] 괄호 꼬임 및 AttributeError 유발하던 복잡한 수식을 날리고, 이미 계산된 컬럼을 깔끔하게 참조
             is_will_hook = (yest2['%R'] <= -80) and (yest['%R'] > yest2['%R'])
             
             is_earnings_danger = False
@@ -315,20 +315,18 @@ def draw_chart(row_info):
 k_time, m_status, m_timer = get_market_time()
 indices = get_macro_indices()
 
-col_time, col_stat = st.columns(2)
-with col_time:
-    st.markdown(f"<div style='padding:5px; font-weight:600; color:{text_color}; font-size:15px;'>KOR: <span style='color:{accent_text};'>{k_time}</span></div>", unsafe_allow_html=True)
-with col_stat:
-    st.markdown(f"<div style='padding:5px; font-weight:600; color:{text_color}; font-size:15px; text-align:right;'>{m_status} <span style='color:{muted_text}; font-size:12px;'>({m_timer})</span></div>", unsafe_allow_html=True)
-
+# [수정] 상단에 있던 고정 시간/상태창을 완전히 제거하고 티커에 모두 통합
 ticker_items = []
+# 1. 티커 가장 앞에 한국 시간과 장 상태를 추가
 ticker_items.append(f"<span style='color:{muted_text};'>KOR</span> <b style='color:{accent_text};'>{k_time}</b>")
 ticker_items.append(f"<b style='color:{text_color};'>{m_status}</b> <span style='color:{muted_text};'>({m_timer})</span>")
 
+# 2. 그 뒤로 3대 지수 추가
 for name, data in indices.items():
     color = "#ef5350" if data['pct'] >= 0 else "#42a5f5"
     sign = "+" if data['pct'] >= 0 else ""
     ticker_items.append(f"<span style='color:{muted_text};'>{name}</span> <b style='color:{text_color};'>{data['price']:,.0f}</b> <span style='color:{color};'>({sign}{data['pct']:.2f}%)</span>")
+
 single_ticker_str = "&nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp;".join(ticker_items)
 full_ticker_str = f"{single_ticker_str} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; " * 8 
 
@@ -341,6 +339,7 @@ st.markdown(f"""
 selected_sector = st.radio("🔭 섹터", list(SECTORS.keys()), horizontal=True, label_visibility="collapsed")
 tab1, tab2, tab3 = st.tabs(["📊 관제탑", "⭐ 관심종목", "🎮 모의투자"])
 
+# ----------------- TAB 1: 관제탑 -----------------
 with tab1:
     if selected_sector:
         with st.spinner("스캔 중..."):
