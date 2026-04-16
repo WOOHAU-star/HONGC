@@ -7,15 +7,41 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import pytz
+import json
+import os
 
 # ==========================================
-# 1. 테마 및 UI 스타일 세팅
+# 1. 영구 저장소 (Local JSON Database) 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V27.0 - Pixel Perfect", layout="wide", page_icon="⚖️")
+DB_FILE = "apex_database.json"
 
+def load_db():
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except: pass
+    return {"favorites": [], "paper_trades": []}
+
+def save_db():
+    data = {
+        "favorites": st.session_state.favorites,
+        "paper_trades": st.session_state.paper_trades
+    }
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+# ==========================================
+# 2. 테마 및 UI 스타일 세팅
+# ==========================================
+st.set_page_config(page_title="APEX V30.0 - Mobile Glide", layout="wide", page_icon="⚖️")
+
+if 'db_loaded' not in st.session_state:
+    db_data = load_db()
+    st.session_state.favorites = db_data.get("favorites", [])
+    st.session_state.paper_trades = db_data.get("paper_trades", [])
+    st.session_state.db_loaded = True
 if 'theme' not in st.session_state: st.session_state.theme = "Night (Dark)"
-if 'favorites' not in st.session_state: st.session_state.favorites = []
-if 'paper_trades' not in st.session_state: st.session_state.paper_trades = []
 
 with st.sidebar:
     st.header("🎨 환경 설정")
@@ -45,6 +71,9 @@ st.markdown(f"""
         100% {{ text-shadow: 0 0 2px #fff, 0 0 5px #00e676, 0 0 10px #00e676; color: #b9fbc0; border-color: #b9fbc0; }}
     }}
     .neon-box {{ padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 2px solid #00e676; text-align: center; animation: neon 1.5s infinite alternate; font-size: 18px; font-weight: 800; margin-bottom: 20px; }}
+    
+    /* 가로형 라디오 버튼(섹터 선택기) 모바일 최적화 */
+    div[role="radiogroup"] {{ justify-content: center; flex-wrap: wrap; gap: 10px; background: {card_bg}; padding: 10px; border-radius: 12px; border: 1px solid {border_color}; margin-bottom: 15px; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -61,7 +90,7 @@ timer_html = f"""
 """
 
 # ==========================================
-# 2. 기초 데이터 엔진
+# 3. 기초 데이터 엔진
 # ==========================================
 TICKER_DICT = {
     "AAPL": "애플", "MSFT": "마이크로소프트", "GOOGL": "구글", "AMZN": "아마존", "META": "메타", "TSLA": "테슬라", "NVDA": "엔비디아", "NFLX": "넷플릭스", "ADBE": "어도비", "CRM": "세일즈포스",
@@ -118,21 +147,21 @@ def get_market_time():
     return datetime.now(pytz.timezone('Asia/Seoul')).strftime('%Y-%m-%d %H:%M:%S'), status, timer
 
 # ==========================================
-# 3. 사이드바 세팅
+# 4. 사이드바 세팅 및 DB 동기화 (섹터 선택 이동됨)
 # ==========================================
 with st.sidebar:
-    st.header("🔭 섹터 선택")
-    selected_sector = st.selectbox("스캔할 섹터", list(SECTORS.keys()))
-    final_tickers = SECTORS[selected_sector]
-
-    st.header("⭐ 내 관심종목 셋업")
+    st.header("⭐ 내 관심종목 관리")
     all_tickers_flat = [t for v in SECTORS.values() for t in v]
-    st.session_state.favorites = st.multiselect(
-        "관심종목 추가/제거", 
+    
+    new_favs = st.multiselect(
+        "관심종목 핀셋 추가/제거", 
         options=all_tickers_flat, 
         default=st.session_state.favorites,
         format_func=lambda x: f"{x} ({TICKER_DICT.get(x, '')})"
     )
+    if new_favs != st.session_state.favorites:
+        st.session_state.favorites = new_favs
+        save_db()
 
     st.header("💰 자산 통제 (Risk)")
     total_capital = st.number_input("가용 자산 (USD)", min_value=1000, value=100000, step=5000)
@@ -148,7 +177,25 @@ with st.sidebar:
     gap_limit_pct = st.slider("프리마켓 갭 허용 (%)", 0.5, 5.0, 2.0, 0.1)
 
 # ==========================================
-# 4. 순수 래리 윌리엄스 엔진 (텍스트 간소화 + 접근율 추가)
+# 5. DB 제어 헬퍼 함수
+# ==========================================
+def toggle_favorite(ticker):
+    if ticker in st.session_state.favorites: st.session_state.favorites.remove(ticker)
+    else: st.session_state.favorites.append(ticker)
+    save_db()
+
+def execute_paper_trade(trade_info):
+    st.session_state.paper_trades.append(trade_info)
+    save_db()
+    st.success("모의투자 체결 완료! (DB 저장됨)")
+
+def reset_paper_trades():
+    st.session_state.paper_trades = []
+    save_db()
+    st.rerun()
+
+# ==========================================
+# 6. 순수 래리 윌리엄스 엔진
 # ==========================================
 @st.cache_data(ttl=30) 
 def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
@@ -195,14 +242,9 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             is_bull = today['Open'] > ma5
             is_hit = current >= target
             
-            # [수정] 타점 접근율 계산 로직 복구
-            if is_bull and not is_hit and not is_gap_danger:
-                dist_pct = ((target - current) / current) * 100
-                dist_str = f"{dist_pct:.2f}%"
-            elif is_hit and not is_gap_danger:
-                dist_str = "✔️ 돌파"
-            else:
-                dist_str = "-"
+            if is_bull and not is_hit and not is_gap_danger: dist_str = f"{((target - current) / current) * 100:.2f}%"
+            elif is_hit and not is_gap_danger: dist_str = "✔️ 돌파"
+            else: dist_str = "-"
 
             is_nr4 = yest['High'] - yest['Low'] <= (df['High'].iloc[-5:-1] - df['Low'].iloc[-5:-1]).min()
             is_oops = (today['Open'] < yest['Low']) and (current > yest['Low'])
@@ -221,7 +263,6 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
 
             score = 0; reasons = []
             
-            # [수정] 텍스트 간소화를 통해 표 줄바꿈(Wrapping) 현상 방지
             if today_weekday in [1, 2]: score += 15; reasons.append("📅 화/수 턴")
             elif today_weekday == 4: score -= 10; reasons.append("⚠️ 금요 리스크")
             
@@ -242,7 +283,7 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             results.append({
                 "티커": ticker, "종목명": display_name, "현재가": current, "매수타점": target,
                 "접근율": dist_str, "적용R/R": dynamic_rr, "익절가격": take_profit, "손절가격": stop_loss, "Bailout": bailout_price,
-                "권장수량": int(allocated_budget / target) if is_bull and not is_gap_danger else 0,
+                "권장수량": int(allocated_budget / target) if is_bull and not is_gap_danger and not is_earnings_danger else 0,
                 "추천점수": score, "엔진판단": " | ".join(reasons)
             })
         except: continue
@@ -264,7 +305,6 @@ def draw_chart(row_info):
     tp_val, tg_val, sl_val = row_info['익절가격'], row_info['매수타점'], row_info['손절가격']
     bo_val = row_info['Bailout']
     
-    # [수정] 차트 라인 텍스트 간소화 (겹침 방지)
     fig.add_hline(y=tp_val, line_dash="solid", line_color="#3b82f6", line_width=1.5, annotation_text=f"Take Profit: ${tp_val:.2f}", annotation_position="top right", row=1, col=1)
     fig.add_hline(y=tg_val, line_dash="dash", line_color="#4ade80", line_width=1.5, annotation_text=f"Target: ${tg_val:.2f}", annotation_position="top right", row=1, col=1)
     fig.add_hline(y=bo_val, line_dash="dot", line_color="#eab308", line_width=1.0, annotation_text=f"Bailout: ${bo_val:.2f}", annotation_position="bottom right", row=1, col=1)
@@ -275,11 +315,11 @@ def draw_chart(row_info):
     
     fig.update_xaxes(rangeslider_visible=False)
     t_style = "plotly_dark" if st.session_state.theme == "Night (Dark)" else "plotly_white"
-    fig.update_layout(template=t_style, height=500, margin=dict(l=0,r=40,t=20,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False)
+    fig.update_layout(template=t_style, height=450, margin=dict(l=0,r=40,t=20,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False)
     return fig
 
 # ==========================================
-# 5. UI 렌더링
+# 7. UI 렌더링 (가로형 섹터 선택기 메인화면 배치)
 # ==========================================
 kor_time, m_status, m_timer = get_market_time()
 
@@ -295,12 +335,17 @@ for col, (name, data) in zip(idx_cols, get_macro_indices().items()):
         st.markdown(f"<div class='index-box'><div style='font-size:13px; color:{muted_text};'>{name}</div><div style='font-size:22px; font-weight:800; color:{text_color};'>{data['price']:,.2f}</div><div style='font-size:15px; color:{c_color}; font-weight:700;'>{sign}{data['pct']:.2f}%</div></div>", unsafe_allow_html=True)
 
 st.write("")
+
+# [NEW] 메인 화면 가로형 섹터 선택기 (모바일 최적화)
+selected_sector = st.radio("🔭 스캔 섹터 (가로 스와이프)", list(SECTORS.keys()), horizontal=True, label_visibility="collapsed")
+final_tickers = SECTORS[selected_sector]
+
 tab1, tab2, tab3 = st.tabs(["📊 섹터 전체 스캔", "⭐ 내 관심종목 컬렉션", "🎮 껄무새 방지소 (모의투자)"])
 
 # ----------------- TAB 1: 관제탑 -----------------
 with tab1:
     if final_tickers:
-        with st.spinner("순수 래리 윌리엄스 딥 필터 작동 중..."):
+        with st.spinner(f"[{selected_sector}] 래리 윌리엄스 딥 필터 작동 중..."):
             df_all, top_picks = get_ranking_data(final_tickers, fixed_k, allocated_per_stock, gap_limit_pct, stop_loss_pct, base_rr_ratio)
         
         st.subheader("💡 결단 보조 지표 (Top 3 Pick)")
@@ -333,7 +378,6 @@ with tab1:
 
         st.divider()
 
-        # [수정] 열 추가 및 너비 최적화
         st.subheader("📋 전체 스캔 리포트 (클릭 시 하단 차트 연동)")
         df_display = df_all[['티커', '종목명', '현재가', '매수타점', '접근율', '권장수량', '추천점수', '엔진판단']].copy()
         
@@ -346,10 +390,10 @@ with tab1:
                 "종목명": st.column_config.TextColumn("종목(Name)"),
                 "현재가": st.column_config.NumberColumn("현재가", format="$%.2f"),
                 "매수타점": st.column_config.NumberColumn("매수타점", format="$%.2f"),
-                "접근율": st.column_config.TextColumn("접근율(남은 상승)"),
+                "접근율": st.column_config.TextColumn("접근율(남은상승)"),
                 "권장수량": st.column_config.NumberColumn("수량", format="%d 주"),
                 "추천점수": st.column_config.NumberColumn("점수"),
-                "엔진판단": st.column_config.TextColumn("엔진 근거", width="medium") # 줄바꿈 방지를 위해 넓이 조정
+                "엔진판단": st.column_config.TextColumn("엔진 근거", width="medium")
             },
             use_container_width=True, hide_index=True, height=350
         )
@@ -367,18 +411,16 @@ with tab1:
             with c_title: st.subheader(f"🔍 정밀 차트 및 작전 제어: {row_info['종목명']}")
             with c_btn1:
                 if st.button("⭐ 관심 해제" if is_fav else "☆ 관심 추가", use_container_width=True, key=f"btn_fav_1_{focus_ticker}"):
-                    if is_fav: st.session_state.favorites.remove(focus_ticker)
-                    else: st.session_state.favorites.append(focus_ticker)
+                    toggle_favorite(focus_ticker)
                     st.rerun()
             with c_btn2:
                 if st.button("🎮 가상 매수", type="primary", use_container_width=True, key=f"btn_buy_1_{focus_ticker}"):
                     if row_info['권장수량'] > 0:
-                        st.session_state.paper_trades.append({
+                        execute_paper_trade({
                             "티커": row_info['티커'], "종목명": row_info['종목명'], "진입가": row_info['현재가'],
                             "수량": row_info['권장수량'], "목표가": row_info['익절가격'], "손절가": row_info['손절가격'], "Bailout": row_info['Bailout'],
                             "진입시간": datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m-%d %H:%M")
                         })
-                        st.success("모의투자 체결 완료!")
                     else: st.error("매수 조건 미달.")
             
             st.plotly_chart(draw_chart(row_info), use_container_width=True, key=f"main_chart_{focus_ticker}")
@@ -401,7 +443,7 @@ with tab2:
                 "종목명": st.column_config.TextColumn("종목(Name)"),
                 "현재가": st.column_config.NumberColumn("현재가", format="$%.2f"),
                 "매수타점": st.column_config.NumberColumn("매수타점", format="$%.2f"),
-                "접근율": st.column_config.TextColumn("접근율(남은 상승)"),
+                "접근율": st.column_config.TextColumn("접근율(남은상승)"),
                 "권장수량": st.column_config.NumberColumn("수량", format="%d 주"),
                 "추천점수": st.column_config.NumberColumn("점수"),
                 "엔진판단": st.column_config.TextColumn("엔진 근거", width="medium")
@@ -420,27 +462,26 @@ with tab2:
             with c_title: st.subheader(f"🔍 관심종목 정밀 차트: {fav_info['종목명']}")
             with c_btn1:
                 if st.button("❌ 관심 해제", use_container_width=True, key=f"btn_fav_2_{fav_ticker}"):
-                    st.session_state.favorites.remove(fav_ticker)
+                    toggle_favorite(fav_ticker)
                     st.rerun()
             with c_btn2:
                 if st.button("🎮 가상 매수", type="primary", use_container_width=True, key=f"btn_buy_2_{fav_ticker}"):
                     if fav_info['권장수량'] > 0:
-                        st.session_state.paper_trades.append({
+                        execute_paper_trade({
                             "티커": fav_info['티커'], "종목명": fav_info['종목명'], "진입가": fav_info['현재가'],
                             "수량": fav_info['권장수량'], "목표가": fav_info['익절가격'], "손절가": fav_info['손절가격'], "Bailout": fav_info['Bailout'],
                             "진입시간": datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m-%d %H:%M")
                         })
-                        st.success("모의투자 체결 완료!")
                     else: st.error("매수 조건 미달.")
             
             st.plotly_chart(draw_chart(fav_info), use_container_width=True, key=f"fav_chart_{fav_ticker}")
     else:
-        st.info("⭐ 좌측 환경설정 창(사이드바)에서 관심종목을 드롭다운으로 추가하십시오.")
+        st.info("⭐ 관제탑(탭 1) 차트 위에서 '☆ 관심 추가' 버튼을 눌러보십시오.")
 
 # ----------------- TAB 3: 모의투자 -----------------
 with tab3:
     st.subheader("🎮 껄무새 방지소 (Paper Trading Lab)")
-    st.markdown("가상으로 체결하여 나의 래리 윌리엄스 로직을 증명하고, **Bailout(시간청산)** 시점을 연습합니다.")
+    st.markdown("가상으로 체결하여 나의 래리 윌리엄스 로직을 증명하고, **Bailout(시간청산)** 시점을 연습합니다. **(DB 영구 보존 중)**")
     
     if st.session_state.paper_trades:
         paper_df = pd.DataFrame(st.session_state.paper_trades)
@@ -486,6 +527,5 @@ with tab3:
         )
         
         if st.button("🗑️ 모의투자 리셋"):
-            st.session_state.paper_trades = []
-            st.rerun()
+            reset_paper_trades()
     else: st.info("비어 있습니다. 관제탑에서 [🎮 가상 매수] 버튼을 누르십시오.")
