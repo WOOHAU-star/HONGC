@@ -34,7 +34,7 @@ def save_db():
 # ==========================================
 # 2. 테마 및 UI 스타일 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V38.0 - X-Ray Chart", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="APEX V39.0 - Ultimate Flow", layout="wide", page_icon="⚖️")
 
 if 'db_loaded' not in st.session_state:
     db_data = load_db()
@@ -65,15 +65,20 @@ st.markdown(f"""
     .rank-1 {{ border-top: 4px solid #3b82f6; }}
     .rank-2 {{ border-top: 4px solid #64748b; }}
     .rank-3 {{ border-top: 4px solid #94a3b8; }}
+    
+    /* [수정] 네온사인 컬러 그린계열(#00e676)로 변경 */
     @keyframes neon {{
-        0% {{ text-shadow: 0 0 5px #fff, 0 0 10px #ef5350, 0 0 20px #ef5350; color: #fff; border-color: #ef5350; }}
-        100% {{ text-shadow: 0 0 2px #fff, 0 0 5px #ef5350, 0 0 10px #ef5350; color: #ffcdd2; border-color: #ffcdd2; }}
+        0% {{ text-shadow: 0 0 5px #fff, 0 0 10px #00e676, 0 0 20px #00e676; color: #fff; border-color: #00e676; }}
+        100% {{ text-shadow: 0 0 2px #fff, 0 0 5px #00e676, 0 0 10px #00e676; color: #b9fbc0; border-color: #b9fbc0; }}
     }}
-    .neon-box {{ padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 2px solid #ef5350; text-align: center; animation: neon 1.5s infinite alternate; font-size: 18px; font-weight: 800; margin-bottom: 20px; }}
+    .neon-box {{ padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 2px solid #00e676; text-align: center; animation: neon 1.5s infinite alternate; font-size: 18px; font-weight: 800; margin-bottom: 20px; }}
+    
     div[role="radiogroup"] {{ justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; background: transparent; border: none; }}
+    
+    /* [수정] 전광판 속도 1/2로 감속 (160s) */
     @keyframes ticker {{ 0% {{ transform: translateX(50%); }} 100% {{ transform: translateX(-150%); }} }}
     .ticker-wrap {{ width: 100%; overflow: hidden; background: transparent; padding: 5px 0; margin-top: 5px; margin-bottom: 15px; border: none; }}
-    .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 80s linear infinite; font-size: 14px; font-weight: 700; }}
+    .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 160s linear infinite; font-size: 14px; font-weight: 700; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -122,14 +127,14 @@ def get_market_time():
         status, timer = "🔴 주말 휴장", f"{diff.days}일 {diff.seconds//3600}h {(diff.seconds//60)%60}m"
     elif now_est < m_open:
         diff = m_open - now_est
-        status, timer = "🟡 프리마켓", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m"
+        status, timer = "🟡 프리마켓", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m 남음"
     elif m_open <= now_est <= m_close:
         diff = m_close - now_est
-        status, timer = "🟢 LIVE", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m"
+        status, timer = "🟢 LIVE", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m 남음"
     else:
         next_open = m_open + timedelta(days=1)
         diff = next_open - now_est
-        status, timer = "🔵 장 마감", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m"
+        status, timer = "🔵 장 마감", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m 남음"
     return datetime.now(pytz.timezone('Asia/Seoul')).strftime('%H:%M:%S'), status, timer
 
 # ==========================================
@@ -224,73 +229,49 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
 def draw_chart(row_info):
     df_chart = yf.Ticker(row_info['티커']).history(period="1mo")
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
+    up_col, dn_col = '#ef5350', '#42a5f5'
+    fig.add_trace(go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'], name="Price", increasing_line_color=up_col, increasing_fillcolor=up_col, decreasing_line_color=dn_col, decreasing_fillcolor=dn_col), row=1, col=1)
     
-    # [수정] 1. 한국형 색상 코드 (상승=빨강 #ef5350, 하락=파랑 #42a5f5)
-    up_col = '#ef5350'
-    dn_col = '#42a5f5'
-    
-    fig.add_trace(go.Candlestick(
-        x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'], 
-        name="Price",
-        increasing_line_color=up_col, increasing_fillcolor=up_col,
-        decreasing_line_color=dn_col, decreasing_fillcolor=dn_col
-    ), row=1, col=1)
-    
-    # [수정] 2. 매물대 투시경 (Volume Profile) - 배경에 옅게 오버레이
-    prices = df_chart['Close']
-    volumes = df_chart['Volume']
+    prices, volumes = df_chart['Close'], df_chart['Volume']
     bins = np.linspace(df_chart['Low'].min(), df_chart['High'].max(), 24) 
     hist, bin_edges = np.histogram(prices, bins=bins, weights=volumes)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    fig.add_trace(go.Bar(x=hist, y=bin_centers, orientation='h', xaxis='x3', yaxis='y', marker=dict(color='rgba(148, 163, 184, 0.15)', line=dict(width=0)), showlegend=False, hoverinfo='none'))
     
-    fig.add_trace(go.Bar(
-        x=hist, y=bin_centers, orientation='h', xaxis='x3', yaxis='y',
-        marker=dict(color='rgba(148, 163, 184, 0.15)', line=dict(width=0)),
-        showlegend=False, hoverinfo='none'
-    ))
-    
-    # 3. 래리 윌리엄스 4대 라인
     tp_val, tg_val, sl_val = row_info['익절가격'], row_info['매수타점'], row_info['손절가격']
     bo_val = row_info['Bailout']
-    
     fig.add_hline(y=tp_val, line_dash="solid", line_color="#3b82f6", line_width=1.5, annotation_text=f"TP: ${tp_val:.2f}", annotation_position="top right", row=1, col=1)
     fig.add_hline(y=tg_val, line_dash="dash", line_color="#4ade80", line_width=1.5, annotation_text=f"Target: ${tg_val:.2f}", annotation_position="top right", row=1, col=1)
     fig.add_hline(y=bo_val, line_dash="dot", line_color="#eab308", line_width=1.0, annotation_text=f"Bailout: ${bo_val:.2f}", annotation_position="bottom right", row=1, col=1)
     fig.add_hline(y=sl_val, line_dash="solid", line_color="#ef5350", line_width=1.5, annotation_text=f"SL: ${sl_val:.2f}", annotation_position="bottom right", row=1, col=1)
     
-    # [수정] 4. 거래량 막대 색상 한국화
     v_colors = [up_col if r['Close'] >= r['Open'] else dn_col for i, r in df_chart.iterrows()]
     fig.add_trace(go.Bar(x=df_chart.index, y=df_chart['Volume'], marker_color=v_colors, name="Volume"), row=2, col=1)
     
-    fig.update_xaxes(rangeslider_visible=False, fixedrange=True)
-    fig.update_yaxes(fixedrange=True)
-    
-    # 매물대(xaxis3)를 차트의 1/3 지점까지만 오도록 Range 설정
+    fig.update_xaxes(rangeslider_visible=False, fixedrange=True); fig.update_yaxes(fixedrange=True)
     t_style = "plotly_dark" if st.session_state.theme == "Night (Dark)" else "plotly_white"
-    fig.update_layout(
-        xaxis3=dict(overlaying='x', side='top', showticklabels=False, range=[0, max(hist)*3]),
-        template=t_style, height=450, margin=dict(l=0,r=40,t=20,b=0), 
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False, dragmode=False
-    )
+    fig.update_layout(xaxis3=dict(overlaying='x', side='top', showticklabels=False, range=[0, max(hist)*3]), template=t_style, height=450, margin=dict(l=0,r=40,t=20,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False, dragmode=False)
     return fig
 
 # ==========================================
-# 6. UI 렌더링
+# 6. UI 렌더링 (원라인 티커 테이프)
 # ==========================================
 k_time, m_status, m_timer = get_market_time()
 indices = get_macro_indices()
 
-col_time, col_stat = st.columns(2)
-with col_time:
-    st.markdown(f"<div style='padding:5px; font-weight:600; color:{text_color}; font-size:15px;'>KOR: <span style='color:{accent_text};'>{k_time}</span></div>", unsafe_allow_html=True)
-with col_stat:
-    st.markdown(f"<div style='padding:5px; font-weight:600; color:{text_color}; font-size:15px; text-align:right;'>{m_status} <span style='color:{muted_text}; font-size:12px;'>({m_timer})</span></div>", unsafe_allow_html=True)
-
+# [수정] 시간과 지수를 하나의 리스트에 모두 담아 한 줄로 묶습니다.
 ticker_items = []
+ticker_items.append(f"<span style='color:{muted_text};'>KOR</span> <b style='color:{accent_text};'>{k_time}</b>")
+ticker_items.append(f"<b style='color:{text_color};'>{m_status}</b> <span style='color:{muted_text};'>({m_timer})</span>")
+
 for name, data in indices.items():
-    color = "#ef5350" if data['pct'] >= 0 else "#42a5f5" # 한국형 컬러
-    ticker_items.append(f"<span style='color:{muted_text};'>{name}</span> <b style='color:{text_color};'>{data['price']:,.0f}</b> <span style='color:{color};'>({data['pct']:+.2f}%)</span>")
+    color = "#ef5350" if data['pct'] >= 0 else "#42a5f5"
+    sign = "+" if data['pct'] >= 0 else ""
+    ticker_items.append(f"<span style='color:{muted_text};'>{name}</span> <b style='color:{text_color};'>{data['price']:,.0f}</b> <span style='color:{color};'>({sign}{data['pct']:.2f}%)</span>")
+
+# 요소들을 파이프(|) 기호로 연결
 single_ticker_str = "&nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp;".join(ticker_items)
+# 스크롤이 끊기지 않게 여러 번 복사
 full_ticker_str = f"{single_ticker_str} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; " * 8 
 
 st.markdown(f"""
@@ -343,7 +324,7 @@ with tab2:
             st.divider(); c_ft, c_fb1, c_fb2, c_fg = st.columns([3, 1, 1, 4])
             with c_ft: st.subheader(f"🔍 {f_row['종목명']}")
             with c_fb1:
-                if st.button("❌ 관심 해제", key=f"fb1_{f_foc}"): st.session_state.favorites.remove(f_foc); save_db(); st.rerun()
+                if st.button("❌ 관심 해제", key=f"fb1_{f_foc}"): toggle_favorite(f_foc); st.rerun()
             with c_fb2:
                 if st.button("🎮 가상 매수", key=f"fb2_{f_foc}", type="primary"):
                     execute_paper_trade({"티커":f_foc, "종목명":f_row['종목명'], "진입가":f_row['현재가'], "수량":f_row['권장수량'], "목표가":f_row['익절가격'], "손절가":f_row['손절가격'], "Bailout":f_row['Bailout'], "진입시간":datetime.now().strftime("%m-%d %H:%M")})
@@ -359,7 +340,7 @@ with tab3:
             except: pdf.loc[pdf['티커']==t, '현재'] = 0
         pdf['수익($)'] = (pdf['현재'] - pdf['진입가']) * pdf['수량']
         pdf['수익률(%)'] = ((pdf['현재'] - pdf['진입가']) / pdf['진입가']) * 100
-        pnl = pdf['수익($)'].sum(); pnl_c = "#ef5350" if pnl >= 0 else "#42a5f5" # 한국형 컬러
+        pnl = pdf['수익($)'].sum(); pnl_c = "#ef5350" if pnl >= 0 else "#42a5f5"
         st.markdown(f"<div style='background:{card_bg}; padding:15px; border-radius:10px; text-align:center;'><div style='font-size:24px; font-weight:900; color:{pnl_c};'>총 수익: ${pnl:,.2f} ({ (pnl/((pdf['진입가']*pdf['수량']).sum()))*100 :.2f}%)</div></div>", unsafe_allow_html=True)
         st.dataframe(pdf, column_config={"진입시간":st.column_config.TextColumn("시간", width="small"), "수익률(%)":st.column_config.ProgressColumn("수익률", format="%.2f%%", min_value=-10, max_value=10)}, use_container_width=True, hide_index=True)
         if st.button("🗑️ 리셋"): reset_paper_trades()
