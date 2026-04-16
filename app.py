@@ -34,7 +34,7 @@ def save_db():
 # ==========================================
 # 2. 테마 및 UI 스타일 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V31.0 - Minimalist", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="APEX V32.0 - UX Master", layout="wide", page_icon="⚖️")
 
 if 'db_loaded' not in st.session_state:
     db_data = load_db()
@@ -135,7 +135,7 @@ def get_market_time():
         status, timer = "🟡 프리마켓", f"오픈까지 {diff.seconds//3600}h {(diff.seconds//60)%60}m"
     elif m_open <= now_est <= m_close:
         diff = m_close - now_est
-        status, timer = "🟢 정규장 (LIVE)", f"마감까지 {diff.seconds//3600}h {(diff.seconds//60)%60}m"
+        status, timer = "🟢 정규장(LIVE)", f"마감까지 {diff.seconds//3600}h {(diff.seconds//60)%60}m"
     else:
         next_open = m_open + timedelta(days=1)
         diff = next_open - now_est
@@ -195,7 +195,8 @@ def reset_paper_trades():
 def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
     results = []
     now = datetime.now()
-    today_weekday = datetime.now(pytz.timezone('US/Eastern')).weekday() 
+    now_est = datetime.now(pytz.timezone('US/Eastern'))
+    today_weekday = now_est.weekday() 
     
     for ticker in tickers:
         try:
@@ -235,8 +236,8 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             is_bull = today['Open'] > ma5
             is_hit = current >= target
             
-            if is_bull and not is_hit and not is_gap_danger: dist_str = f"{((target - current) / current) * 100:.2f}%"
-            elif is_hit and not is_gap_danger: dist_str = "✔️ 돌파"
+            if is_bull and not is_hit and not is_gap_danger: dist_str = f"{((target - current) / current) * 100:.1f}%"
+            elif is_hit and not is_gap_danger: dist_str = "✔️돌파"
             else: dist_str = "-"
 
             is_nr4 = yest['High'] - yest['Low'] <= (df['High'].iloc[-5:-1] - df['Low'].iloc[-5:-1]).min()
@@ -255,19 +256,20 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
                 except: pass
 
             score = 0; reasons = []
-            if today_weekday in [1, 2]: score += 15; reasons.append("📅 화/수 턴")
-            elif today_weekday == 4: score -= 10; reasons.append("⚠️ 금요 리스크")
             
-            if is_earnings_danger: score -= 200; reasons.append("⚠️ 실적임박")
-            elif is_gap_danger: score -= 100; reasons.append("🚫 갭상승")
-            elif not is_bull: score -= 50; reasons.append("📉 역배열")
+            if today_weekday in [1, 2]: score += 15; reasons.append("화/수")
+            elif today_weekday == 4: score -= 10; reasons.append("금요")
+            
+            if is_earnings_danger: score -= 200; reasons.append("⚠️실적")
+            elif is_gap_danger: score -= 100; reasons.append("🚫갭")
+            elif not is_bull: score -= 50; reasons.append("📉역배열")
             else:
-                score += 10; reasons.append("✅ 5MA↑")
-                if is_hit: score += 50; reasons.append("🔥 돌파")
-                if is_nr4: score += 20; reasons.append("⚡ NR4")
-                if is_oops: score += 25; reasons.append("🔄 OOPS")
-                if is_will_hook: score += 15; reasons.append("🎣 %R반전")
-                if is_vix_fix_bottom: score += 30; reasons.append("🥶 VIX바닥")
+                score += 10; reasons.append("✅5MA")
+                if is_hit: score += 50; reasons.append("🔥돌파")
+                if is_nr4: score += 20; reasons.append("⚡NR4")
+                if is_oops: score += 25; reasons.append("🔄OOPS")
+                if is_will_hook: score += 15; reasons.append("🎣%R")
+                if is_vix_fix_bottom: score += 30; reasons.append("🥶VIX")
 
             kor_name = TICKER_DICT.get(ticker, "")
             display_name = f"{ticker} ({kor_name})" if kor_name else ticker
@@ -275,8 +277,8 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             results.append({
                 "티커": ticker, "종목명": display_name, "현재가": current, "매수타점": target,
                 "접근율": dist_str, "적용R/R": dynamic_rr, "익절가격": take_profit, "손절가격": stop_loss, "Bailout": bailout_price,
-                "권장수량": int(allocated_budget / target) if is_bull and not is_gap_danger else 0,
-                "추천점수": score, "엔진판단": " | ".join(reasons)
+                "권장수량": int(allocated_budget / target) if is_bull and not is_gap_danger and not is_earnings_danger else 0,
+                "추천점수": score, "엔진판단": " ".join(reasons)
             })
         except: continue
         
@@ -297,56 +299,63 @@ def draw_chart(row_info):
     tp_val, tg_val, sl_val = row_info['익절가격'], row_info['매수타점'], row_info['손절가격']
     bo_val = row_info['Bailout']
     
-    fig.add_hline(y=tp_val, line_dash="solid", line_color="#3b82f6", line_width=1.5, annotation_text=f"Take Profit: ${tp_val:.2f}", annotation_position="top right", row=1, col=1)
+    fig.add_hline(y=tp_val, line_dash="solid", line_color="#3b82f6", line_width=1.5, annotation_text=f"TP: ${tp_val:.2f}", annotation_position="top right", row=1, col=1)
     fig.add_hline(y=tg_val, line_dash="dash", line_color="#4ade80", line_width=1.5, annotation_text=f"Target: ${tg_val:.2f}", annotation_position="top right", row=1, col=1)
     fig.add_hline(y=bo_val, line_dash="dot", line_color="#eab308", line_width=1.0, annotation_text=f"Bailout: ${bo_val:.2f}", annotation_position="bottom right", row=1, col=1)
-    fig.add_hline(y=sl_val, line_dash="solid", line_color="#f87171", line_width=1.5, annotation_text=f"Stop Loss: ${sl_val:.2f}", annotation_position="bottom right", row=1, col=1)
+    fig.add_hline(y=sl_val, line_dash="solid", line_color="#f87171", line_width=1.5, annotation_text=f"SL: ${sl_val:.2f}", annotation_position="bottom right", row=1, col=1)
     
     colors = ['#4ade80' if r['Close'] >= r['Open'] else '#f87171' for i, r in df_chart.iterrows()]
     fig.add_trace(go.Bar(x=df_chart.index, y=df_chart['Volume'], marker_color=colors, name="Volume"), row=2, col=1)
     
-    fig.update_xaxes(rangeslider_visible=False)
+    # [차트 터치/스크롤 100% 잠금 세팅 (모바일 UX 마스터)]
+    fig.update_xaxes(rangeslider_visible=False, fixedrange=True)
+    fig.update_yaxes(fixedrange=True)
+    
     t_style = "plotly_dark" if st.session_state.theme == "Night (Dark)" else "plotly_white"
-    fig.update_layout(template=t_style, height=450, margin=dict(l=0,r=40,t=20,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False)
+    fig.update_layout(
+        template=t_style, height=450, margin=dict(l=0,r=40,t=20,b=0), 
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False,
+        dragmode=False # 모바일 드래그 패닝 완전 방지
+    )
     return fig
 
 # ==========================================
-# 6. UI 렌더링 (지수 전광판 슬림화)
+# 6. UI 렌더링 (슬림형 지수/시간 밴드)
 # ==========================================
 kor_time, m_status, m_timer = get_market_time()
 indices = get_macro_indices()
 
-# 시간 및 상태 바
-col_time, col_stat, col_timer = st.columns([1, 1, 1])
-with col_time: st.markdown(f"<div style='background:{card_bg}; padding:10px; border-radius:8px; border:1px solid {border_color}; font-weight:600; color:{text_color}; text-align:center;'>KOR: <span style='color:{accent_text};'>{kor_time}</span></div>", unsafe_allow_html=True)
-with col_stat: st.markdown(f"<div style='background:{card_bg}; padding:10px; border-radius:8px; border:1px solid {border_color}; font-weight:600; color:{text_color}; text-align:center;'>{m_status} <span style='color:{muted_text}; font-size:13px;'>({m_timer})</span></div>", unsafe_allow_html=True)
-with col_timer: components.html(f"""<body style="margin:0; display:flex; align-items:center; justify-content:center; height:45px; background-color:{card_bg}; border-radius:8px; border:1px solid {border_color}; border-style:solid;">{timer_html}</body>""", height=47)
-
-# [UI 업데이트] 지수 전광판 슬림화 (1줄 티커 스타일)
-def format_idx(name, data):
+# 초슬림형 상단 전광판 (모바일 화면공간 절약)
+def format_idx_slim(name, data):
     color = "#4ade80" if data['pct'] >= 0 else "#f87171"
     sign = "+" if data['pct'] >= 0 else ""
-    return f"<div style='text-align:center; padding: 0 10px;'><span style='font-size:13px; color:{muted_text}; font-weight:600;'>{name}</span>&nbsp;&nbsp;<span style='font-size:16px; font-weight:800; color:{text_color};'>{data['price']:,.1f}</span> <span style='font-size:13px; font-weight:700; color:{color};'>({sign}{data['pct']:.2f}%)</span></div>"
+    return f"<span style='font-size:12px; color:{muted_text};'>{name}</span> <span style='font-size:14px; font-weight:800; color:{text_color};'>{data['price']:,.0f}</span> <span style='font-size:12px; font-weight:700; color:{color};'>({sign}{data['pct']:.1f}%)</span>"
 
 sp_data = indices.get("S&P 500", {"price":0, "pct":0})
 nd_data = indices.get("NASDAQ", {"price":0, "pct":0})
 ndx_data = indices.get("NASDAQ 100", {"price":0, "pct":0})
 
 st.markdown(f"""
-<div style='display:flex; justify-content:space-around; align-items:center; background:{card_bg}; padding:12px; border-radius:8px; border:1px solid {border_color}; margin-top:15px; margin-bottom:20px;'>
-    {format_idx("S&P 500", sp_data)}
-    <div style='border-left:1px solid {border_color}; height:20px;'></div>
-    {format_idx("NASDAQ", nd_data)}
-    <div style='border-left:1px solid {border_color}; height:20px;'></div>
-    {format_idx("NASDAQ 100", ndx_data)}
+<div style='display:flex; flex-direction:column; background:{card_bg}; padding:8px 12px; border-radius:8px; border:1px solid {border_color}; margin-bottom:15px;'>
+    <div style='display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid {border_color}; padding-bottom:5px; margin-bottom:5px;'>
+        <div style='font-size:13px; font-weight:600; color:{text_color};'>KOR: <span style='color:{accent_text};'>{kor_time.split(' ')[1]}</span></div>
+        <div style='font-size:13px; font-weight:600; color:{text_color};'>{m_status} <span style='color:{muted_text}; font-size:11px;'>({m_timer})</span></div>
+        <div style='font-size:12px; font-weight:600; color:#4ade80;'><span id="countdown-timer">30초 후 갱신</span> ⏳</div>
+    </div>
+    <div style='display:flex; justify-content:space-around; align-items:center;'>
+        {format_idx_slim("S&P500", sp_data)}
+        <div style='border-left:1px solid {border_color}; height:12px;'></div>
+        {format_idx_slim("NASDAQ", nd_data)}
+        <div style='border-left:1px solid {border_color}; height:12px;'></div>
+        {format_idx_slim("NDX100", ndx_data)}
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# 메인 화면 가로형 섹터 선택기
-selected_sector = st.radio("🔭 스캔 섹터 (가로 스와이프)", list(SECTORS.keys()), horizontal=True, label_visibility="collapsed")
+selected_sector = st.radio("🔭 스캔 섹터", list(SECTORS.keys()), horizontal=True, label_visibility="collapsed")
 final_tickers = SECTORS[selected_sector]
 
-tab1, tab2, tab3 = st.tabs(["📊 섹터 전체 스캔", "⭐ 내 관심종목 컬렉션", "🎮 껄무새 방지소 (모의투자)"])
+tab1, tab2, tab3 = st.tabs(["📊 섹터 전체 스캔", "⭐ 내 관심종목 컬렉션", "🎮 모의투자 랩실"])
 
 # ----------------- TAB 1: 관제탑 -----------------
 with tab1:
@@ -367,7 +376,6 @@ with tab1:
                             <div style="font-size:14px; line-height:1.7; color:{text_color};">
                                 🎯 진입: <b>${row['매수타점']:.2f}</b> (현재 ${row['현재가']:.2f})<br/>
                                 💰 목표: ${row['익절가격']:.2f} <span style="font-size:12px; color:{accent_text};">(R/R 1:{row['적용R/R']:.1f})</span><br/>
-                                ⏱️ 시간청산: ${row['Bailout']:.2f} <span style="font-size:12px; color:#eab308;">(미결판시)</span><br/>
                                 🔪 손절: ${row['손절가격']:.2f}<br/>
                                 🛒 수량: {row['권장수량']}주<br/>
                                 🔍 근거: <span style="color:#eab308; font-weight:bold;">{row['엔진판단']}</span>
@@ -376,15 +384,15 @@ with tab1:
                     """, unsafe_allow_html=True)
         else: st.info("상승장 및 타점 조건을 완벽히 충족하는 종목이 없습니다.")
 
-        reached_targets = [p for p in top_picks if "타점돌파" in p['엔진판단']]
+        reached_targets = [p for p in top_picks if "🔥" in p['엔진판단']]
         if reached_targets:
             for row in reached_targets:
                 st.markdown(f"""<div class="neon-box">📌 타점 도달: {row['종목명']} 종목이 타점을 돌파했습니다. (진입가: ${row['현재가']:.2f})</div>""", unsafe_allow_html=True)
 
         st.divider()
-
         st.subheader("📋 전체 스캔 리포트 (클릭 시 하단 차트 연동)")
-        df_display = df_all[['티커', '종목명', '현재가', '매수타점', '접근율', '권장수량', '추천점수', '엔진판단']].copy()
+        
+        df_display = df_all[['티커', '종목명', '접근율', '현재가', '매수타점', '권장수량', '추천점수', '엔진판단']].copy()
         
         selection_event = st.dataframe(
             df_display,
@@ -392,15 +400,15 @@ with tab1:
             selection_mode="single-row",
             column_config={
                 "티커": None, 
-                "종목명": st.column_config.TextColumn("종목(Name)"),
-                "현재가": st.column_config.NumberColumn("현재가", format="$%.2f"),
-                "매수타점": st.column_config.NumberColumn("매수타점", format="$%.2f"),
-                "접근율": st.column_config.TextColumn("접근율(남은상승)"),
-                "권장수량": st.column_config.NumberColumn("수량", format="%d 주"),
-                "추천점수": st.column_config.NumberColumn("점수"),
-                "엔진판단": st.column_config.TextColumn("엔진 근거", width="medium")
+                "종목명": st.column_config.TextColumn("종목(Name)", width="small"),
+                "접근율": st.column_config.TextColumn("접근율", width="small"),
+                "현재가": st.column_config.NumberColumn("현재가", format="$%.2f", width="small"),
+                "매수타점": st.column_config.NumberColumn("타점", format="$%.2f", width="small"),
+                "권장수량": st.column_config.NumberColumn("수량", format="%d주", width="small"),
+                "추천점수": st.column_config.NumberColumn("점수", width="small"),
+                "엔진판단": st.column_config.TextColumn("엔진근거", width="large")
             },
-            use_container_width=True, hide_index=True, height=300
+            use_container_width=True, hide_index=True, height=350
         )
 
         selected_idx = selection_event.selection.rows[0] if selection_event and len(selection_event.selection.rows) > 0 else 0
@@ -410,6 +418,7 @@ with tab1:
             focus_ticker = row_info['티커']
             is_fav = focus_ticker in st.session_state.favorites
             
+            st.divider()
             c_title, c_btn1, c_btn2, c_gap = st.columns([3, 1, 1, 4])
             with c_title: st.subheader(f"🔍 정밀 차트 및 작전 제어: {row_info['종목명']}")
             with c_btn1:
@@ -426,7 +435,7 @@ with tab1:
                         })
                     else: st.error("매수 조건 미달.")
             
-            st.plotly_chart(draw_chart(row_info), use_container_width=True, key=f"main_chart_{focus_ticker}")
+            st.plotly_chart(draw_chart(row_info), use_container_width=True, key=f"main_chart_{focus_ticker}", config={'scrollZoom': False, 'displayModeBar': False})
 
 # ----------------- TAB 2: 내 관심종목 -----------------
 with tab2:
@@ -435,7 +444,7 @@ with tab2:
             df_fav, fav_top_picks = get_ranking_data(st.session_state.favorites, fixed_k, allocated_per_stock, gap_limit_pct, stop_loss_pct, base_rr_ratio)
         
         st.subheader("⭐ 관심종목 스캔 리포트")
-        df_fav_display = df_fav[['티커', '종목명', '현재가', '매수타점', '접근율', '권장수량', '추천점수', '엔진판단']].copy()
+        df_fav_display = df_fav[['티커', '종목명', '접근율', '현재가', '매수타점', '권장수량', '추천점수', '엔진판단']].copy()
         
         fav_selection = st.dataframe(
             df_fav_display,
@@ -443,14 +452,14 @@ with tab2:
             selection_mode="single-row",
             column_config={
                 "티커": None,
-                "종목명": st.column_config.TextColumn("종목(Name)"),
-                "현재가": st.column_config.NumberColumn("현재가", format="$%.2f"),
-                "매수타점": st.column_config.NumberColumn("매수타점", format="$%.2f"),
-                "접근율": st.column_config.TextColumn("접근율(남은상승)"),
-                "권장수량": st.column_config.NumberColumn("수량", format="%d 주"),
-                "추천점수": st.column_config.NumberColumn("점수"),
-                "엔진판단": st.column_config.TextColumn("엔진 근거", width="medium")
-            }, use_container_width=True, hide_index=True, height=250
+                "종목명": st.column_config.TextColumn("종목(Name)", width="small"),
+                "접근율": st.column_config.TextColumn("접근율", width="small"),
+                "현재가": st.column_config.NumberColumn("현재가", format="$%.2f", width="small"),
+                "매수타점": st.column_config.NumberColumn("타점", format="$%.2f", width="small"),
+                "권장수량": st.column_config.NumberColumn("수량", format="%d주", width="small"),
+                "추천점수": st.column_config.NumberColumn("점수", width="small"),
+                "엔진판단": st.column_config.TextColumn("엔진근거", width="large")
+            }, use_container_width=True, hide_index=True, height=300
         )
 
         st.divider()
@@ -477,19 +486,18 @@ with tab2:
                         })
                     else: st.error("매수 조건 미달.")
             
-            st.plotly_chart(draw_chart(fav_info), use_container_width=True, key=f"fav_chart_{fav_ticker}")
+            st.plotly_chart(draw_chart(fav_info), use_container_width=True, key=f"fav_chart_{fav_ticker}", config={'scrollZoom': False, 'displayModeBar': False})
     else:
-        st.info("⭐ 좌측 환경설정 창(사이드바)에서 관심종목을 드롭다운으로 추가하십시오.")
+        st.info("⭐ 스캔 리포트에서 차트 위 '☆ 관심 추가' 버튼을 눌러주십시오.")
 
 # ----------------- TAB 3: 모의투자 -----------------
 with tab3:
     st.subheader("🎮 껄무새 방지소 (Paper Trading Lab)")
-    st.markdown("가상으로 체결하여 나의 래리 윌리엄스 로직을 증명하고, **Bailout(시간청산)** 시점을 연습합니다.")
     
     if st.session_state.paper_trades:
         paper_df = pd.DataFrame(st.session_state.paper_trades)
         
-        with st.spinner("모의 계좌 실시간 수익률 계산 중..."):
+        with st.spinner("실시간 수익률 계산 중..."):
             live_prices = {}
             for t in paper_df['티커'].unique():
                 try:
@@ -497,9 +505,9 @@ with tab3:
                     live_prices[t] = df_live['Close'].iloc[-1]
                 except: live_prices[t] = 0
                 
-        paper_df['실시간 현재가'] = paper_df['티커'].map(live_prices)
-        paper_df['수익금($)'] = (paper_df['실시간 현재가'] - paper_df['진입가']) * paper_df['수량']
-        paper_df['수익률(%)'] = ((paper_df['실시간 현재가'] - paper_df['진입가']) / paper_df['진입가']) * 100
+        paper_df['현재가'] = paper_df['티커'].map(live_prices)
+        paper_df['수익금($)'] = (paper_df['현재가'] - paper_df['진입가']) * paper_df['수량']
+        paper_df['수익률(%)'] = ((paper_df['현재가'] - paper_df['진입가']) / paper_df['진입가']) * 100
         
         total_pnl = paper_df['수익금($)'].sum()
         total_invested = (paper_df['진입가'] * paper_df['수량']).sum()
@@ -516,16 +524,13 @@ with tab3:
         st.dataframe(
             paper_df,
             column_config={
-                "진입시간": st.column_config.TextColumn("진입 시간"),
-                "종목명": st.column_config.TextColumn("종목"),
-                "진입가": st.column_config.NumberColumn("진입가", format="$%.2f"),
-                "실시간 현재가": st.column_config.NumberColumn("현재가", format="$%.2f"),
-                "수량": st.column_config.NumberColumn("보유 수량", format="%d주"),
-                "목표가": st.column_config.NumberColumn("목표가", format="$%.2f"),
-                "Bailout": st.column_config.NumberColumn("시간청산가", format="$%.2f"),
-                "손절가": st.column_config.NumberColumn("손절가", format="$%.2f"),
-                "수익금($)": st.column_config.NumberColumn("수익금", format="$%.2f"),
-                "수익률(%)": st.column_config.ProgressColumn("수익률(%)", format="%.2f%%", min_value=-10, max_value=10)
+                "진입시간": st.column_config.TextColumn("시간", width="small"),
+                "종목명": st.column_config.TextColumn("종목", width="small"),
+                "진입가": st.column_config.NumberColumn("진입", format="$%.2f", width="small"),
+                "현재가": st.column_config.NumberColumn("현재", format="$%.2f", width="small"),
+                "수량": st.column_config.NumberColumn("수량", format="%d주", width="small"),
+                "수익금($)": st.column_config.NumberColumn("수익금", format="$%.2f", width="small"),
+                "수익률(%)": st.column_config.ProgressColumn("수익률(%)", format="%.2f%%", min_value=-10, max_value=10, width="medium")
             }, use_container_width=True, hide_index=True
         )
         
