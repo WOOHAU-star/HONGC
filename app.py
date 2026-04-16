@@ -34,7 +34,7 @@ def save_db():
 # ==========================================
 # 2. 테마 및 UI 스타일 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V34.0 - Fixed Timer", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="APEX V35.0 - Vision Clear", layout="wide", page_icon="⚖️")
 
 if 'db_loaded' not in st.session_state:
     db_data = load_db()
@@ -70,19 +70,20 @@ st.markdown(f"""
         100% {{ text-shadow: 0 0 2px #fff, 0 0 5px #00e676, 0 0 10px #00e676; color: #b9fbc0; border-color: #b9fbc0; }}
     }}
     .neon-box {{ padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 2px solid #00e676; text-align: center; animation: neon 1.5s infinite alternate; font-size: 18px; font-weight: 800; margin-bottom: 20px; }}
+    div[role="radiogroup"] {{ justify-content: center; flex-wrap: wrap; gap: 10px; background: {card_bg}; padding: 10px; border-radius: 12px; border: 1px solid {border_color}; margin-bottom: 15px; }}
     
-    /* 가로 스크롤 전광판 (Ticker Tape) */
+    /* 가로 스크롤 전광판 (무중력 연속 스크롤) */
     @keyframes ticker {{
-        0% {{ transform: translateX(100%); }}
-        100% {{ transform: translateX(-150%); }}
+        0% {{ transform: translate3d(0, 0, 0); }}
+        100% {{ transform: translate3d(-100%, 0, 0); }}
     }}
-    .ticker-wrap {{ width: 100%; overflow: hidden; background: {card_bg}; padding: 8px 0; border-radius: 8px; border: 1px solid {border_color}; margin-top: 10px; }}
-    .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 20s linear infinite; font-size: 14px; font-weight: 700; }}
+    .ticker-wrap {{ width: 100%; overflow: hidden; background: {card_bg}; padding: 10px 0; border-radius: 8px; border: 1px solid {border_color}; margin-top: 10px; margin-bottom: 15px; white-space: nowrap; box-sizing: border-box; }}
+    .ticker-move {{ display: inline-block; padding-left: 100%; animation: ticker 40s linear infinite; font-size: 14px; font-weight: 700; }}
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 데이터 엔진
+# 3. 기초 데이터 엔진
 # ==========================================
 TICKER_DICT = {
     "AAPL": "애플", "MSFT": "마이크로소프트", "GOOGL": "구글", "AMZN": "아마존", "META": "메타", "TSLA": "테슬라", "NVDA": "엔비디아", "NFLX": "넷플릭스", "ADBE": "어도비", "CRM": "세일즈포스",
@@ -126,14 +127,14 @@ def get_market_time():
         status, timer = "🔴 주말 휴장", f"{diff.days}일 {diff.seconds//3600}h {(diff.seconds//60)%60}m"
     elif now_est < m_open:
         diff = m_open - now_est
-        status, timer = "🟡 프리마켓", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m"
+        status, timer = "🟡 프리마켓", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m 남음"
     elif m_open <= now_est <= m_close:
         diff = m_close - now_est
-        status, timer = "🟢 LIVE", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m"
+        status, timer = "🟢 LIVE", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m 남음"
     else:
         next_open = m_open + timedelta(days=1)
         diff = next_open - now_est
-        status, timer = "🔵 장 마감", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m"
+        status, timer = "🔵 장 마감", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m 남음"
     return datetime.now(pytz.timezone('Asia/Seoul')).strftime('%H:%M:%S'), status, timer
 
 # ==========================================
@@ -238,43 +239,29 @@ def draw_chart(row_info):
     return fig
 
 # ==========================================
-# 6. UI 렌더링 (Fixed Timer & Slim Ticker)
+# 6. UI 렌더링 (타이머 하단 이동 & 전광판 최적화)
 # ==========================================
 k_time, m_status, m_timer = get_market_time()
 indices = get_macro_indices()
 
-# 최상단 시간 & 상태 바
-st.markdown(f"""
-<div style='display:flex; justify-content:space-between; align-items:center; background:{card_bg}; padding:10px 15px; border-radius:8px; border:1px solid {border_color};'>
-    <div style='font-size:13px; font-weight:600;'>KOR: <span style='color:{accent_text};'>{k_time}</span></div>
-    <div style='font-size:13px; font-weight:600;'>{m_status} <span style='color:{muted_text}; font-size:11px;'>({m_timer})</span></div>
-</div>
-""", unsafe_allow_html=True)
+# 최상단: KOR 시간과 장 상태만 1:1 슬림 배치
+col_time, col_stat = st.columns(2)
+with col_time:
+    st.markdown(f"<div style='background:{card_bg}; padding:10px; border-radius:8px; border:1px solid {border_color}; font-weight:600; color:{text_color}; text-align:center;'>KOR: <span style='color:{accent_text};'>{k_time}</span></div>", unsafe_allow_html=True)
+with col_stat:
+    st.markdown(f"<div style='background:{card_bg}; padding:10px; border-radius:8px; border:1px solid {border_color}; font-weight:600; color:{text_color}; text-align:center;'>{m_status} <span style='color:{muted_text}; font-size:12px;'>({m_timer})</span></div>", unsafe_allow_html=True)
 
-# [해결] 확실하게 작동하는 카운트다운 타이머 컴포넌트
-timer_js = f"""
-<div id="countdown" style="font-family:sans-serif; font-size:12px; font-weight:bold; color:#4ade80; text-align:right; padding:5px;">45초 후 갱신 ⏳</div>
-<script>
-    let t = 45;
-    setInterval(() => {{
-        t--;
-        if(t <= 0) {{ t=45; window.parent.location.reload(); }}
-        document.getElementById("countdown").innerText = t + "초 후 갱신 ⏳";
-    }}, 1000);
-</script>
-"""
-components.html(timer_js, height=30)
-
-# [해결] 3대 지수 티커 테이프 (가로 롤링)
+# 3대 지수 티커 테이프 (길게 반복하여 끊김 없는 무중력 스크롤)
 ticker_items = []
 for name, data in indices.items():
     color = "#4ade80" if data['pct'] >= 0 else "#f87171"
     ticker_items.append(f"<span style='color:{muted_text};'>{name}</span> <b style='color:{text_color};'>{data['price']:,.0f}</b> <span style='color:{color};'>({data['pct']:+.2f}%)</span>")
-ticker_html = "&nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp;".join(ticker_items)
+single_ticker_str = "&nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp;".join(ticker_items)
+full_ticker_str = f"{single_ticker_str} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; " * 6 # 6번 복사하여 끊김 방지
 
 st.markdown(f"""
 <div class="ticker-wrap">
-    <div class="ticker-move">{ticker_html} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; {ticker_html}</div>
+    <div class="ticker-move">{full_ticker_str}</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -343,3 +330,19 @@ with tab3:
         st.dataframe(pdf, column_config={"진입시간":st.column_config.TextColumn("시간", width="small"), "수익률(%)":st.column_config.ProgressColumn("수익률", format="%.2f%%", min_value=-10, max_value=10)}, use_container_width=True, hide_index=True)
         if st.button("🗑️ 리셋"): reset_paper_trades()
     else: st.info("체결된 종목이 없습니다.")
+
+st.divider()
+
+# 최하단 조용한 카운트다운 타이머
+timer_js = f"""
+<div id="countdown" style="font-family:sans-serif; font-size:12px; font-weight:bold; color:#4ade80; text-align:center; padding:5px;">45초 후 화면 새로고침 ⏳</div>
+<script>
+    let t = 45;
+    setInterval(() => {{
+        t--;
+        if(t <= 0) {{ t=45; window.parent.location.reload(); }}
+        document.getElementById("countdown").innerText = t + "초 후 화면 새로고침 ⏳";
+    }}, 1000);
+</script>
+"""
+components.html(timer_js, height=30)
