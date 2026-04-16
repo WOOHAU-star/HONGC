@@ -34,7 +34,7 @@ def save_db():
 # ==========================================
 # 2. 테마 및 UI 스타일 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V43.0 - Perfect Minimalist", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="APEX V44.0 - Perfect Sync", layout="wide", page_icon="⚖️")
 
 if 'db_loaded' not in st.session_state:
     db_data = load_db()
@@ -72,8 +72,6 @@ st.markdown(f"""
     .neon-box {{ padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 2px solid #00e676; text-align: center; animation: neon 1.5s infinite alternate; font-size: 18px; font-weight: 800; margin-bottom: 20px; }}
     
     div[role="radiogroup"] {{ justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; background: transparent; border: none; }}
-    
-    /* [수정] 160초(1/2 속도) 초저속 무중력 롤링 티커 */
     @keyframes ticker {{ 0% {{ transform: translateX(50%); }} 100% {{ transform: translateX(-150%); }} }}
     .ticker-wrap {{ width: 100%; overflow: hidden; background: transparent; padding: 5px 0; margin-top: 5px; margin-bottom: 15px; border: none; }}
     .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 160s linear infinite; font-size: 14px; font-weight: 700; }}
@@ -173,7 +171,7 @@ def reset_paper_trades():
     st.rerun()
 
 # ==========================================
-# 5. 순수 래리 윌리엄스 엔진 (에러 완벽 차단)
+# 5. 순수 래리 윌리엄스 엔진 (로직 동기화 완벽 적용)
 # ==========================================
 @st.cache_data(ttl=60) 
 def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
@@ -194,7 +192,6 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             df['L-PC'] = abs(df['Low'] - df['Close'].shift(1))
             atr_14 = df[['H-L', 'H-PC', 'L-PC']].max(axis=1).rolling(14).mean().iloc[-1]
             
-            # 안전한 수식 연산 (0 나누기 방지)
             df['High_14'] = df['High'].rolling(14).max()
             df['Low_14'] = df['Low'].rolling(14).min()
             denom = df['High_14'] - df['Low_14']
@@ -222,19 +219,11 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             
             gap_pct = ((today['Open'] - yest['Close']) / yest['Close']) * 100 if yest['Close'] > 0 else 0
             
+            # 필터 변수
             is_gap_danger = gap_pct >= gap_limit
             is_bull = today['Open'] > ma5
             is_hit = current >= target
             is_chasing = current > (target * 1.015) 
-            
-            if is_bull and not is_hit and not is_gap_danger: dist_str = f"{((target - current) / current) * 100:.1f}%"
-            elif is_hit and not is_chasing and not is_gap_danger: dist_str = "✔️진입가능"
-            elif is_chasing: dist_str = "🚀초과(관망)"
-            else: dist_str = "-"
-
-            is_nr4 = (yest['High'] - yest['Low']) <= (df['High'].iloc[-5:-1] - df['Low'].iloc[-5:-1]).min()
-            is_oops = (today['Open'] < yest['Low']) and (current > yest['Low'])
-            is_will_hook = (yest2['%R'] <= -80) and (yest['%R'] > yest2['%R'])
             
             is_earnings_danger = False
             if is_bull and (is_hit or ((target - current) / current * 100 < 3.0)):
@@ -245,6 +234,20 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
                         if isinstance(e_date, datetime) and 0 <= (e_date.date() - now.date()).days <= 7:
                             is_earnings_danger = True
                 except: pass
+            
+            # [수정] 텍스트와 엔진 심사 로직 100% 동기화 (진입가능 오표기 방지)
+            if not is_bull or is_gap_danger or is_earnings_danger:
+                dist_str = "🚫조건미달"
+            elif is_chasing:
+                dist_str = "🚀추격(관망)"
+            elif is_hit:
+                dist_str = "✔️진입가능"
+            else:
+                dist_str = f"{((target - current) / current) * 100:.1f}%"
+
+            is_nr4 = (yest['High'] - yest['Low']) <= (df['High'].iloc[-5:-1] - df['Low'].iloc[-5:-1]).min()
+            is_oops = (today['Open'] < yest['Low']) and (current > yest['Low'])
+            is_will_hook = (yest2['%R'] <= -80) and (yest['%R'] > yest2['%R'])
 
             score = 0; reasons = []
             if today_weekday in [1, 2]: score += 15; reasons.append("화/수")
@@ -265,7 +268,7 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             results.append({
                 "티커": ticker, "종목명": f"{ticker} ({kor_name})" if kor_name else ticker, "현재가": current, "매수타점": target,
                 "접근율": dist_str, "적용R/R": dynamic_rr, "익절가격": take_profit, "손절가격": stop_loss, "Bailout": bailout_price,
-                "권장수량": int(allocated_budget / target) if is_bull and not is_gap_danger and not is_chasing else 0,
+                "권장수량": int(allocated_budget / target) if is_bull and not is_gap_danger and not is_chasing and not is_earnings_danger else 0,
                 "추천점수": score, "엔진판단": " ".join(reasons)
             })
         except Exception as e:
@@ -310,18 +313,15 @@ def draw_chart(row_info):
     return fig
 
 # ==========================================
-# 6. UI 렌더링
+# 6. UI 렌더링 (원라인 티커 테이프)
 # ==========================================
 k_time, m_status, m_timer = get_market_time()
 indices = get_macro_indices()
 
-# [수정] 상단에 있던 고정 시간/상태창을 완전히 제거하고 티커에 모두 통합
 ticker_items = []
-# 1. 티커 가장 앞에 한국 시간과 장 상태를 추가
 ticker_items.append(f"<span style='color:{muted_text};'>KOR</span> <b style='color:{accent_text};'>{k_time}</b>")
 ticker_items.append(f"<b style='color:{text_color};'>{m_status}</b> <span style='color:{muted_text};'>({m_timer})</span>")
 
-# 2. 그 뒤로 3대 지수 추가
 for name, data in indices.items():
     color = "#ef5350" if data['pct'] >= 0 else "#42a5f5"
     sign = "+" if data['pct'] >= 0 else ""
@@ -370,8 +370,8 @@ with tab1:
             row = df_all.iloc[idx]; focus = row['티커']; is_f = focus in st.session_state.favorites
             st.divider()
             
-            if "⛔추격금지" in row['엔진판단']:
-                st.warning("⚠️ 이미 타점을 크게 초과하여 상승했습니다. 뇌동매매(추격매수)를 금지합니다.")
+            if "⛔추격금지" in row['엔진판단']: st.warning("⚠️ 이미 타점을 크게 초과하여 상승했습니다. 뇌동매매(추격매수)를 금지합니다.")
+            elif "🚫조건미달" in row['접근율']: st.warning("⚠️ 역배열(하락추세) 또는 갭상승, 실적 등의 위험이 있어 매수를 금지합니다.")
                 
             c_t, c_b1, c_b2, c_g = st.columns([3, 1, 1, 4])
             with c_t: st.subheader(f"🔍 {row['종목명']}")
@@ -399,6 +399,7 @@ with tab2:
             st.divider()
             
             if "⛔추격금지" in f_row['엔진판단']: st.warning("⚠️ 이미 타점을 크게 초과하여 상승했습니다. 뇌동매매(추격매수)를 금지합니다.")
+            elif "🚫조건미달" in f_row['접근율']: st.warning("⚠️ 역배열(하락추세) 또는 갭상승, 실적 등의 위험이 있어 매수를 금지합니다.")
             
             c_ft, c_fb1, c_fb2, c_fg = st.columns([3, 1, 1, 4])
             with c_ft: st.subheader(f"🔍 {f_row['종목명']}")
@@ -429,7 +430,6 @@ with tab3:
 
 st.divider()
 
-# 안전한 스무스 싱크용 히든 버튼
 st.button("refresh", key="auto_refresh", help="hidden_refresh")
 st.markdown("""<style>div[data-testid="stButton"]:has(button[title="hidden_refresh"]) { display: none !important; }</style>""", unsafe_allow_html=True)
 
