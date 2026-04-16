@@ -34,7 +34,7 @@ def save_db():
 # ==========================================
 # 2. 테마 및 UI 스타일 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V35.0 - Vision Clear", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="APEX V38.0 - X-Ray Chart", layout="wide", page_icon="⚖️")
 
 if 'db_loaded' not in st.session_state:
     db_data = load_db()
@@ -66,19 +66,14 @@ st.markdown(f"""
     .rank-2 {{ border-top: 4px solid #64748b; }}
     .rank-3 {{ border-top: 4px solid #94a3b8; }}
     @keyframes neon {{
-        0% {{ text-shadow: 0 0 5px #fff, 0 0 10px #00e676, 0 0 20px #00e676; color: #fff; border-color: #00e676; }}
-        100% {{ text-shadow: 0 0 2px #fff, 0 0 5px #00e676, 0 0 10px #00e676; color: #b9fbc0; border-color: #b9fbc0; }}
+        0% {{ text-shadow: 0 0 5px #fff, 0 0 10px #ef5350, 0 0 20px #ef5350; color: #fff; border-color: #ef5350; }}
+        100% {{ text-shadow: 0 0 2px #fff, 0 0 5px #ef5350, 0 0 10px #ef5350; color: #ffcdd2; border-color: #ffcdd2; }}
     }}
-    .neon-box {{ padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 2px solid #00e676; text-align: center; animation: neon 1.5s infinite alternate; font-size: 18px; font-weight: 800; margin-bottom: 20px; }}
-    div[role="radiogroup"] {{ justify-content: center; flex-wrap: wrap; gap: 10px; background: {card_bg}; padding: 10px; border-radius: 12px; border: 1px solid {border_color}; margin-bottom: 15px; }}
-    
-    /* 가로 스크롤 전광판 (무중력 연속 스크롤) */
-    @keyframes ticker {{
-        0% {{ transform: translate3d(0, 0, 0); }}
-        100% {{ transform: translate3d(-100%, 0, 0); }}
-    }}
-    .ticker-wrap {{ width: 100%; overflow: hidden; background: {card_bg}; padding: 10px 0; border-radius: 8px; border: 1px solid {border_color}; margin-top: 10px; margin-bottom: 15px; white-space: nowrap; box-sizing: border-box; }}
-    .ticker-move {{ display: inline-block; padding-left: 100%; animation: ticker 40s linear infinite; font-size: 14px; font-weight: 700; }}
+    .neon-box {{ padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 2px solid #ef5350; text-align: center; animation: neon 1.5s infinite alternate; font-size: 18px; font-weight: 800; margin-bottom: 20px; }}
+    div[role="radiogroup"] {{ justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; background: transparent; border: none; }}
+    @keyframes ticker {{ 0% {{ transform: translateX(50%); }} 100% {{ transform: translateX(-150%); }} }}
+    .ticker-wrap {{ width: 100%; overflow: hidden; background: transparent; padding: 5px 0; margin-top: 5px; margin-bottom: 15px; border: none; }}
+    .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 80s linear infinite; font-size: 14px; font-weight: 700; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -103,7 +98,7 @@ SECTORS = {
     "🛡️ 보안/클라우드": ["CRWD", "PANW", "FTNT", "NOW", "SNOW", "PLTR", "DDOG", "NET", "ZS", "OKTA"]
 }
 
-@st.cache_data(ttl=45)
+@st.cache_data(ttl=60)
 def get_macro_indices():
     tickers = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "NASDAQ 100": "^NDX"}
     data = {}
@@ -127,14 +122,14 @@ def get_market_time():
         status, timer = "🔴 주말 휴장", f"{diff.days}일 {diff.seconds//3600}h {(diff.seconds//60)%60}m"
     elif now_est < m_open:
         diff = m_open - now_est
-        status, timer = "🟡 프리마켓", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m 남음"
+        status, timer = "🟡 프리마켓", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m"
     elif m_open <= now_est <= m_close:
         diff = m_close - now_est
-        status, timer = "🟢 LIVE", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m 남음"
+        status, timer = "🟢 LIVE", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m"
     else:
         next_open = m_open + timedelta(days=1)
         diff = next_open - now_est
-        status, timer = "🔵 장 마감", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m 남음"
+        status, timer = "🔵 장 마감", f"{(diff.seconds//3600)}h {(diff.seconds//60)%60}m"
     return datetime.now(pytz.timezone('Asia/Seoul')).strftime('%H:%M:%S'), status, timer
 
 # ==========================================
@@ -177,7 +172,7 @@ def reset_paper_trades():
 # ==========================================
 # 5. 순수 래리 윌리엄스 엔진
 # ==========================================
-@st.cache_data(ttl=45) 
+@st.cache_data(ttl=60) 
 def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
     results = []
     now = datetime.now()
@@ -229,35 +224,74 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
 def draw_chart(row_info):
     df_chart = yf.Ticker(row_info['티커']).history(period="1mo")
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.8, 0.2])
-    fig.add_trace(go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'], name="Price"), row=1, col=1)
-    for y, color, txt, pos in [(row_info['익절가격'], "#3b82f6", "TP", "top right"), (row_info['매수타점'], "#4ade80", "Target", "top right"), (row_info['Bailout'], "#eab308", "BO", "bottom right"), (row_info['손절가격'], "#f87171", "SL", "bottom right")]:
-        fig.add_hline(y=y, line_dash="dash" if "Target" in txt else "solid", line_color=color, annotation_text=f"{txt}: ${y:.2f}", annotation_position=pos, row=1, col=1)
-    colors = ['#4ade80' if r['Close'] >= r['Open'] else '#f87171' for i, r in df_chart.iterrows()]
-    fig.add_trace(go.Bar(x=df_chart.index, y=df_chart['Volume'], marker_color=colors, name="Volume"), row=2, col=1)
-    fig.update_xaxes(rangeslider_visible=False, fixedrange=True); fig.update_yaxes(fixedrange=True)
-    fig.update_layout(template="plotly_dark" if st.session_state.theme == "Night (Dark)" else "plotly_white", height=450, margin=dict(l=0,r=40,t=20,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False, dragmode=False)
+    
+    # [수정] 1. 한국형 색상 코드 (상승=빨강 #ef5350, 하락=파랑 #42a5f5)
+    up_col = '#ef5350'
+    dn_col = '#42a5f5'
+    
+    fig.add_trace(go.Candlestick(
+        x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'], 
+        name="Price",
+        increasing_line_color=up_col, increasing_fillcolor=up_col,
+        decreasing_line_color=dn_col, decreasing_fillcolor=dn_col
+    ), row=1, col=1)
+    
+    # [수정] 2. 매물대 투시경 (Volume Profile) - 배경에 옅게 오버레이
+    prices = df_chart['Close']
+    volumes = df_chart['Volume']
+    bins = np.linspace(df_chart['Low'].min(), df_chart['High'].max(), 24) 
+    hist, bin_edges = np.histogram(prices, bins=bins, weights=volumes)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    fig.add_trace(go.Bar(
+        x=hist, y=bin_centers, orientation='h', xaxis='x3', yaxis='y',
+        marker=dict(color='rgba(148, 163, 184, 0.15)', line=dict(width=0)),
+        showlegend=False, hoverinfo='none'
+    ))
+    
+    # 3. 래리 윌리엄스 4대 라인
+    tp_val, tg_val, sl_val = row_info['익절가격'], row_info['매수타점'], row_info['손절가격']
+    bo_val = row_info['Bailout']
+    
+    fig.add_hline(y=tp_val, line_dash="solid", line_color="#3b82f6", line_width=1.5, annotation_text=f"TP: ${tp_val:.2f}", annotation_position="top right", row=1, col=1)
+    fig.add_hline(y=tg_val, line_dash="dash", line_color="#4ade80", line_width=1.5, annotation_text=f"Target: ${tg_val:.2f}", annotation_position="top right", row=1, col=1)
+    fig.add_hline(y=bo_val, line_dash="dot", line_color="#eab308", line_width=1.0, annotation_text=f"Bailout: ${bo_val:.2f}", annotation_position="bottom right", row=1, col=1)
+    fig.add_hline(y=sl_val, line_dash="solid", line_color="#ef5350", line_width=1.5, annotation_text=f"SL: ${sl_val:.2f}", annotation_position="bottom right", row=1, col=1)
+    
+    # [수정] 4. 거래량 막대 색상 한국화
+    v_colors = [up_col if r['Close'] >= r['Open'] else dn_col for i, r in df_chart.iterrows()]
+    fig.add_trace(go.Bar(x=df_chart.index, y=df_chart['Volume'], marker_color=v_colors, name="Volume"), row=2, col=1)
+    
+    fig.update_xaxes(rangeslider_visible=False, fixedrange=True)
+    fig.update_yaxes(fixedrange=True)
+    
+    # 매물대(xaxis3)를 차트의 1/3 지점까지만 오도록 Range 설정
+    t_style = "plotly_dark" if st.session_state.theme == "Night (Dark)" else "plotly_white"
+    fig.update_layout(
+        xaxis3=dict(overlaying='x', side='top', showticklabels=False, range=[0, max(hist)*3]),
+        template=t_style, height=450, margin=dict(l=0,r=40,t=20,b=0), 
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False, dragmode=False
+    )
     return fig
 
 # ==========================================
-# 6. UI 렌더링 (타이머 하단 이동 & 전광판 최적화)
+# 6. UI 렌더링
 # ==========================================
 k_time, m_status, m_timer = get_market_time()
 indices = get_macro_indices()
 
-# 최상단: KOR 시간과 장 상태만 1:1 슬림 배치
 col_time, col_stat = st.columns(2)
 with col_time:
-    st.markdown(f"<div style='background:{card_bg}; padding:10px; border-radius:8px; border:1px solid {border_color}; font-weight:600; color:{text_color}; text-align:center;'>KOR: <span style='color:{accent_text};'>{k_time}</span></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='padding:5px; font-weight:600; color:{text_color}; font-size:15px;'>KOR: <span style='color:{accent_text};'>{k_time}</span></div>", unsafe_allow_html=True)
 with col_stat:
-    st.markdown(f"<div style='background:{card_bg}; padding:10px; border-radius:8px; border:1px solid {border_color}; font-weight:600; color:{text_color}; text-align:center;'>{m_status} <span style='color:{muted_text}; font-size:12px;'>({m_timer})</span></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='padding:5px; font-weight:600; color:{text_color}; font-size:15px; text-align:right;'>{m_status} <span style='color:{muted_text}; font-size:12px;'>({m_timer})</span></div>", unsafe_allow_html=True)
 
-# 3대 지수 티커 테이프 (길게 반복하여 끊김 없는 무중력 스크롤)
 ticker_items = []
 for name, data in indices.items():
-    color = "#4ade80" if data['pct'] >= 0 else "#f87171"
+    color = "#ef5350" if data['pct'] >= 0 else "#42a5f5" # 한국형 컬러
     ticker_items.append(f"<span style='color:{muted_text};'>{name}</span> <b style='color:{text_color};'>{data['price']:,.0f}</b> <span style='color:{color};'>({data['pct']:+.2f}%)</span>")
 single_ticker_str = "&nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp;".join(ticker_items)
-full_ticker_str = f"{single_ticker_str} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; " * 6 # 6번 복사하여 끊김 방지
+full_ticker_str = f"{single_ticker_str} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; " * 8 
 
 st.markdown(f"""
 <div class="ticker-wrap">
@@ -281,7 +315,7 @@ with tab1:
         reached = [p for p in top_picks if "🔥" in p['엔진판단']]
         for r in reached: st.markdown(f"""<div class="neon-box">📌 타점 도달: {r['종목명']} (진입: ${r['현재가']:.2f})</div>""", unsafe_allow_html=True)
 
-        st.subheader("📋 섹터 스캔")
+        st.divider()
         df_disp = df_all[['티커', '종목명', '접근율', '현재가', '매수타점', '권장수량', '추천점수', '엔진판단']]
         sel = st.dataframe(df_disp, on_select="rerun", selection_mode="single-row", column_config={"티커":None, "종목명":st.column_config.TextColumn("종목", width="small"), "접근율":st.column_config.TextColumn("접근", width="small"), "현재가":st.column_config.NumberColumn("현재", format="$%.2f", width="small"), "매수타점":st.column_config.NumberColumn("타점", format="$%.2f", width="small"), "권장수량":st.column_config.NumberColumn("수량", format="%d주", width="small"), "추천점수":st.column_config.NumberColumn("점수", width="small"), "엔진판단":st.column_config.TextColumn("근거", width="medium")}, use_container_width=True, hide_index=True, height=300)
         
@@ -302,7 +336,7 @@ with tab1:
 with tab2:
     if st.session_state.favorites:
         df_f, f_top = get_ranking_data(st.session_state.favorites, fixed_k, allocated_per_stock, gap_limit_pct, stop_loss_pct, base_rr_ratio)
-        f_sel = st.dataframe(df_f[['티커', '종목명', '접근율', '현재가', '매수타점', '권장수량', '추천점수', '엔진판단']], on_select="rerun", selection_mode="single-row", use_container_width=True, hide_index=True, height=300)
+        f_sel = st.dataframe(df_f[['티커', '종목명', '접근율', '현재가', '매수타점', '권장수량', '추천점수', '엔진판단']], on_select="rerun", selection_mode="single-row", column_config={"티커":None, "종목명":st.column_config.TextColumn("종목", width="small"), "접근율":st.column_config.TextColumn("접근", width="small"), "현재가":st.column_config.NumberColumn("현재", format="$%.2f", width="small"), "매수타점":st.column_config.NumberColumn("타점", format="$%.2f", width="small"), "권장수량":st.column_config.NumberColumn("수량", format="%d주", width="small"), "추천점수":st.column_config.NumberColumn("점수", width="small"), "엔진판단":st.column_config.TextColumn("근거", width="medium")}, use_container_width=True, hide_index=True, height=300)
         f_idx = f_sel.selection.rows[0] if f_sel and f_sel.selection.rows else 0
         if not df_f.empty:
             f_row = df_f.iloc[f_idx]; f_foc = f_row['티커']
@@ -325,24 +359,10 @@ with tab3:
             except: pdf.loc[pdf['티커']==t, '현재'] = 0
         pdf['수익($)'] = (pdf['현재'] - pdf['진입가']) * pdf['수량']
         pdf['수익률(%)'] = ((pdf['현재'] - pdf['진입가']) / pdf['진입가']) * 100
-        pnl = pdf['수익($)'].sum(); pnl_c = "#4ade80" if pnl >= 0 else "#f87171"
+        pnl = pdf['수익($)'].sum(); pnl_c = "#ef5350" if pnl >= 0 else "#42a5f5" # 한국형 컬러
         st.markdown(f"<div style='background:{card_bg}; padding:15px; border-radius:10px; text-align:center;'><div style='font-size:24px; font-weight:900; color:{pnl_c};'>총 수익: ${pnl:,.2f} ({ (pnl/((pdf['진입가']*pdf['수량']).sum()))*100 :.2f}%)</div></div>", unsafe_allow_html=True)
         st.dataframe(pdf, column_config={"진입시간":st.column_config.TextColumn("시간", width="small"), "수익률(%)":st.column_config.ProgressColumn("수익률", format="%.2f%%", min_value=-10, max_value=10)}, use_container_width=True, hide_index=True)
         if st.button("🗑️ 리셋"): reset_paper_trades()
     else: st.info("체결된 종목이 없습니다.")
 
 st.divider()
-
-# 최하단 조용한 카운트다운 타이머
-timer_js = f"""
-<div id="countdown" style="font-family:sans-serif; font-size:12px; font-weight:bold; color:#4ade80; text-align:center; padding:5px;">45초 후 화면 새로고침 ⏳</div>
-<script>
-    let t = 45;
-    setInterval(() => {{
-        t--;
-        if(t <= 0) {{ t=45; window.parent.location.reload(); }}
-        document.getElementById("countdown").innerText = t + "초 후 화면 새로고침 ⏳";
-    }}, 1000);
-</script>
-"""
-components.html(timer_js, height=30)
