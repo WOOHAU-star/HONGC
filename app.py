@@ -11,7 +11,7 @@ import json
 import os
 
 # ==========================================
-# 1. 영구 저장소 (전체 셋팅값 백업 적용)
+# 1. 영구 저장소 (Local JSON Database) 세팅
 # ==========================================
 DB_FILE = "apex_database.json"
 
@@ -21,7 +21,6 @@ def load_db():
             with open(DB_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except: pass
-    # 세팅값이 없으면 초기 기본값 부여
     return {
         "favorites": [], "paper_trades": [], 
         "settings": {
@@ -42,7 +41,7 @@ def save_db():
 # ==========================================
 # 2. 테마 및 UI 스타일 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V45.0 - Full Persistence", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="APEX V46.0 - Universal Search", layout="wide", page_icon="⚖️")
 
 if 'db_loaded' not in st.session_state:
     db_data = load_db()
@@ -52,7 +51,6 @@ if 'db_loaded' not in st.session_state:
     st.session_state.db_loaded = True
 if 'theme' not in st.session_state: st.session_state.theme = "Night (Dark)"
 
-# 사이드바 값 변경 시 즉각 DB 저장하는 콜백 함수
 def update_settings():
     st.session_state.settings = {
         "total_capital": st.session_state.in_capital,
@@ -88,7 +86,6 @@ st.markdown(f"""
     .rank-2 {{ border-top: 4px solid #64748b; }}
     .rank-3 {{ border-top: 4px solid #94a3b8; }}
     
-    /* 깜빡임(Blinking) 애니메이션 */
     @keyframes blinker {{ 50% {{ opacity: 0; }} }}
     .blink-red {{ color: #ef5350; font-weight: 900; animation: blinker 1s linear infinite; }}
     .blink-blue {{ color: #42a5f5; font-weight: 900; animation: blinker 1s linear infinite; }}
@@ -162,12 +159,44 @@ def get_market_time():
     return datetime.now(pytz.timezone('Asia/Seoul')).strftime('%H:%M:%S'), status, timer
 
 # ==========================================
-# 4. 사이드바 및 DB 제어 (상태 영구 보존 로직 추가)
+# 4. 사이드바 (종목 검색기 추가)
 # ==========================================
 with st.sidebar:
     st.header("⭐ 관심종목 관리")
+    
+    # [신규] 미국 주식 직접 검색 및 추가 (유니버설 검색기)
+    st.subheader("🌐 종목 직접 검색 (US Market)")
+    col_search, col_btn = st.columns([3, 1])
+    with col_search:
+        new_search_ticker = st.text_input("티커 (예: PLTR, MARA)", label_visibility="collapsed").upper()
+    with col_btn:
+        search_submit = st.button("추가", use_container_width=True)
+        
+    if search_submit and new_search_ticker:
+        if "." in new_search_ticker:
+             st.error("미국 시장 종목만 추가 가능합니다.")
+        elif new_search_ticker in st.session_state.favorites:
+             st.warning("이미 등록된 종목입니다.")
+        else:
+             with st.spinner("검증 중..."):
+                 try:
+                     test_df = yf.Ticker(new_search_ticker).history(period="1d")
+                     if not test_df.empty:
+                         st.session_state.favorites.append(new_search_ticker)
+                         save_db()
+                         st.success(f"{new_search_ticker} 추가 완료!")
+                         st.rerun()
+                     else:
+                         st.error("존재하지 않는 티커입니다.")
+                 except:
+                     st.error("검증에 실패했습니다.")
+    
+    st.divider()
     all_tickers_flat = [t for v in SECTORS.values() for t in v]
-    new_favs = st.multiselect("종목 추가/제거", options=all_tickers_flat, default=st.session_state.favorites, format_func=lambda x: f"{x} ({TICKER_DICT.get(x, '')})")
+    # 기존에 수동으로 추가한 종목도 드롭다운 옵션에 포함되도록 합침
+    combined_options = list(set(all_tickers_flat + st.session_state.favorites))
+    
+    new_favs = st.multiselect("등록된 관심종목 삭제", options=combined_options, default=st.session_state.favorites, format_func=lambda x: f"{x} ({TICKER_DICT.get(x, '직접추가')})")
     if new_favs != st.session_state.favorites:
         st.session_state.favorites = new_favs
         save_db()
@@ -203,7 +232,7 @@ def reset_paper_trades():
     st.rerun()
 
 # ==========================================
-# 5. 순수 래리 윌리엄스 엔진 (등락률 계산 추가)
+# 5. 순수 래리 윌리엄스 엔진
 # ==========================================
 @st.cache_data(ttl=60) 
 def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
@@ -211,7 +240,8 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
     now = datetime.now()
     today_weekday = datetime.now(pytz.timezone('US/Eastern')).weekday() 
     
-    default_columns = ["티커", "종목명", "현재가(등락)", "현재가_수치", "매수타점", "접근율", "적용R/R", "익절가격", "손절가격", "Bailout", "권장수량", "추천점수", "엔진판단", "상승여부"]
+    # [수정] 컬럼 분리: '상태' 램프와 순수 '접근율', '등락률' 분리
+    default_columns = ["티커", "종목명", "상태", "접근율", "현재가", "등락률", "매수타점", "권장수량", "추천점수", "엔진판단", "현재가_수치", "상승여부"]
     
     for ticker in tickers:
         try:
@@ -236,13 +266,13 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             current = today['Close']
             yest_close = yest['Close']
             
-            # [신규] 등락률 계산 로직
+            # [수정] 상승/하락률 명확히 분리
             change_pct = ((current - yest_close) / yest_close) * 100 if yest_close > 0 else 0
             is_up = change_pct > 0
             
-            if change_pct > 0: price_str = f"🔴 ${current:.2f} (+{change_pct:.2f}%)"
-            elif change_pct < 0: price_str = f"🔵 ${current:.2f} ({change_pct:.2f}%)"
-            else: price_str = f"⚪ ${current:.2f} (0.00%)"
+            if change_pct > 0: pct_str = f"🔺 +{change_pct:.2f}%"
+            elif change_pct < 0: pct_str = f"🔵 {change_pct:.2f}%"
+            else: pct_str = "➖ 0.00%"
             
             ma5 = df['Close'].rolling(window=5).mean().iloc[-1]
             p_range = yest['High'] - yest['Low']
@@ -271,10 +301,20 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
                             is_earnings_danger = True
                 except: pass
             
-            if not is_bull or is_gap_danger or is_earnings_danger: dist_str = "🚫조건미달"
-            elif is_chasing: dist_str = "🚀추격(관망)"
-            elif is_hit: dist_str = "✔️진입가능"
-            else: dist_str = f"{((target - current) / current) * 100:.1f}%"
+            # [수정] 램프(Status)와 접근율(숫자) 분리
+            dist_pct_str = f"{((target - current) / current) * 100:.1f}%"
+            
+            if not is_bull or is_gap_danger or is_earnings_danger: 
+                status_lamp = "🔴 불가"
+                dist_pct_str = "-"
+            elif is_chasing: 
+                status_lamp = "🚀 초과"
+                dist_pct_str = "-"
+            elif is_hit: 
+                status_lamp = "🟢 진입"
+                dist_pct_str = "완료"
+            else: 
+                status_lamp = "🟡 대기"
 
             is_nr4 = (yest['High'] - yest['Low']) <= (df['High'].iloc[-5:-1] - df['Low'].iloc[-5:-1]).min()
             is_oops = (today['Open'] < yest['Low']) and (current > yest['Low'])
@@ -295,12 +335,13 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
                 if is_will_hook: score += 15; reasons.append("🎣%R반전")
                 if df['VIX_Fix'].iloc[-1] >= 12.0: score += 30; reasons.append("🥶VIX바닥")
 
-            kor_name = TICKER_DICT.get(ticker, "")
+            kor_name = TICKER_DICT.get(ticker, "직접추가")
             results.append({
-                "티커": ticker, "종목명": f"{ticker} ({kor_name})" if kor_name else ticker, 
-                "현재가(등락)": price_str, "현재가_수치": current, "상승여부": is_up, "매수타점": target,
-                "접근율": dist_str, "적용R/R": dynamic_rr, "익절가격": take_profit, "손절가격": stop_loss, "Bailout": bailout_price,
-                "권장수량": int(allocated_budget / target) if is_bull and not is_gap_danger and not is_chasing and not is_earnings_danger else 0,
+                "티커": ticker, "종목명": f"{ticker} ({kor_name})" if kor_name != "직접추가" else ticker,
+                "상태": status_lamp, "접근율": dist_pct_str, 
+                "현재가": current, "등락률": pct_str, "현재가_수치": current, "상승여부": is_up, 
+                "매수타점": target, "적용R/R": dynamic_rr, "익절가격": take_profit, "손절가격": stop_loss, "Bailout": bailout_price,
+                "권장수량": int(allocated_budget / target) if status_lamp == "🟢 진입" or status_lamp == "🟡 대기" else 0,
                 "추천점수": score, "엔진판단": " ".join(reasons)
             })
         except Exception as e: continue
@@ -380,48 +421,46 @@ with tab1:
         with st.spinner("스캔 중..."):
             df_all, top_picks = get_ranking_data(SECTORS[selected_sector], fixed_k, allocated_per_stock, gap_limit_pct, stop_loss_pct, base_rr_ratio)
         
-        st.subheader("💡 Top 3 Pick (진입 가능 타점)")
+        st.subheader("💡 Top 3 Pick")
         if top_picks:
             cols = st.columns(3)
             for i, row in enumerate(top_picks):
                 with cols[i]:
                     st.markdown(f"""<div class="rank-box rank-{i+1}"><div style="font-size:15px; font-weight:800;">{row['종목명']}</div><div style="font-size:13px; line-height:1.6;">🎯 진입: <b>${row['매수타점']:.2f}</b><br/>💰 목표: ${row['익절가격']:.2f}<br/>🔍 근거: <span style="color:#eab308; font-weight:bold;">{row['엔진판단']}</span></div></div>""", unsafe_allow_html=True)
         else: 
-            st.info("현재 상승장 및 진입 가능한 타점(추격매수 제외)을 완벽히 충족하는 종목이 없습니다.")
+            st.info("조건을 완벽히 충족하는 종목이 없습니다.")
 
-        reached = [p for p in top_picks if "🔥" in p['엔진판단']]
+        reached = [p for p in top_picks if "🟢 진입" in p['상태']]
         for r in reached: st.markdown(f"""<div class="neon-box">📌 타점 도달: {r['종목명']} (진입가: ${r['현재가_수치']:.2f})</div>""", unsafe_allow_html=True)
 
         st.divider()
         
         if df_all.empty:
-            st.warning("⚠️ 현재 조건을 충족하는 종목이 없거나, 통신이 지연되고 있습니다. 필터를 낮추거나 다른 섹터를 선택하십시오.")
+            st.warning("⚠️ 현재 조건을 충족하는 종목이 없거나, 통신 지연입니다.")
         else:
-            # [UI 업데이트] 표에는 현재가(등락률) 표기
-            df_disp = df_all[['티커', '종목명', '접근율', '현재가(등락)', '매수타점', '권장수량', '추천점수', '엔진판단']]
-            sel = st.dataframe(df_disp, on_select="rerun", selection_mode="single-row", column_config={"티커":None, "종목명":st.column_config.TextColumn("종목", width="small"), "접근율":st.column_config.TextColumn("접근", width="small"), "현재가(등락)":st.column_config.TextColumn("현재가", width="medium"), "매수타점":st.column_config.NumberColumn("타점", format="$%.2f", width="small"), "권장수량":st.column_config.NumberColumn("수량", format="%d주", width="small"), "추천점수":st.column_config.NumberColumn("점수", width="small"), "엔진판단":st.column_config.TextColumn("근거", width="large")}, use_container_width=True, hide_index=True, height=300)
+            df_disp = df_all[['티커', '종목명', '상태', '접근율', '현재가', '등락률', '매수타점', '권장수량', '추천점수', '엔진판단']]
+            sel = st.dataframe(df_disp, on_select="rerun", selection_mode="single-row", column_config={"티커":None, "종목명":st.column_config.TextColumn("종목", width="small"), "상태":st.column_config.TextColumn("상태", width="small"), "접근율":st.column_config.TextColumn("접근", width="small"), "현재가":st.column_config.NumberColumn("현재", format="$%.2f", width="small"), "등락률":st.column_config.TextColumn("등락", width="small"), "매수타점":st.column_config.NumberColumn("타점", format="$%.2f", width="small"), "권장수량":st.column_config.NumberColumn("수량", format="%d주", width="small"), "추천점수":st.column_config.NumberColumn("점수", width="small"), "엔진판단":st.column_config.TextColumn("근거", width="medium")}, use_container_width=True, hide_index=True, height=300)
             
             idx = sel.selection.rows[0] if sel and sel.selection.rows else 0
             
             row = df_all.iloc[idx]; focus = row['티커']; is_f = focus in st.session_state.favorites
             st.divider()
             
-            if "⛔추격금지" in row['엔진판단']: st.warning("⚠️ 이미 타점을 크게 초과하여 상승했습니다. 뇌동매매(추격매수)를 금지합니다.")
-            elif "🚫조건미달" in row['접근율']: st.warning("⚠️ 역배열(하락추세) 또는 갭상승, 실적 등의 위험이 있어 매수를 금지합니다.")
+            if "🔴 불가" in row['상태']: st.warning("⚠️ 역배열(하락추세), 갭상승, 실적 등의 위험이 있어 매수를 금지합니다.")
+            elif "🚀 초과" in row['상태']: st.warning("⚠️ 이미 타점을 크게 초과하여 상승했습니다. 뇌동매매(추격매수)를 금지합니다.")
                 
             c_t, c_b1, c_b2, c_g = st.columns([3, 1, 1, 4])
             
-            # [UI 업데이트] 클릭한 종목 제목 옆에 CSS 깜빡임 가격 표시
             blink_class = "blink-red" if row['상승여부'] else "blink-blue"
             with c_t: 
-                st.markdown(f"<h3 style='margin:0;'>🔍 {row['종목명']} <span class='{blink_class}' style='font-size:20px; margin-left:10px;'>{row['현재가(등락)'][2:]}</span></h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='margin:0;'>🔍 {row['종목명']} <span class='{blink_class}' style='font-size:20px; margin-left:10px;'>${row['현재가_수치']:.2f} ({row['등락률']})</span></h3>", unsafe_allow_html=True)
                 
             with c_b1: 
                 if st.button("⭐ 관심 해제" if is_f else "☆ 관심 추가", key=f"b1_{focus}"): toggle_favorite(focus); st.rerun()
             with c_b2:
                 if st.button("🎮 가상 매수", type="primary", key=f"b2_{focus}"):
                     if row['권장수량'] > 0: execute_paper_trade({"티커":focus, "종목명":row['종목명'], "진입가":row['현재가_수치'], "수량":row['권장수량'], "목표가":row['익절가격'], "손절가":row['손절가격'], "Bailout":row['Bailout'], "진입시간":datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m-%d %H:%M")})
-                    else: st.error("조건 미달 (또는 추격매수 금지구간)")
+                    else: st.error("조건 미달 (또는 금지구간)")
             st.plotly_chart(draw_chart(row), use_container_width=True, key=f"c1_{focus}", config={'displayModeBar': False})
 
 # ----------------- TAB 2: 내 관심종목 -----------------
@@ -433,27 +472,27 @@ with tab2:
         if df_f.empty:
              st.warning("⚠️ 관심종목 중 현재 시장 데이터를 불러올 수 있는 종목이 없습니다.")
         else:
-            f_sel = st.dataframe(df_f[['티커', '종목명', '접근율', '현재가(등락)', '매수타점', '권장수량', '추천점수', '엔진판단']], on_select="rerun", selection_mode="single-row", column_config={"티커":None, "종목명":st.column_config.TextColumn("종목", width="small"), "접근율":st.column_config.TextColumn("접근", width="small"), "현재가(등락)":st.column_config.TextColumn("현재가", width="medium"), "매수타점":st.column_config.NumberColumn("타점", format="$%.2f", width="small"), "권장수량":st.column_config.NumberColumn("수량", format="%d주", width="small"), "추천점수":st.column_config.NumberColumn("점수", width="small"), "엔진판단":st.column_config.TextColumn("근거", width="large")}, use_container_width=True, hide_index=True, height=300)
+            f_sel = st.dataframe(df_f[['티커', '종목명', '상태', '접근율', '현재가', '등락률', '매수타점', '권장수량', '추천점수', '엔진판단']], on_select="rerun", selection_mode="single-row", column_config={"티커":None, "종목명":st.column_config.TextColumn("종목", width="small"), "상태":st.column_config.TextColumn("상태", width="small"), "접근율":st.column_config.TextColumn("접근", width="small"), "현재가":st.column_config.NumberColumn("현재", format="$%.2f", width="small"), "등락률":st.column_config.TextColumn("등락", width="small"), "매수타점":st.column_config.NumberColumn("타점", format="$%.2f", width="small"), "권장수량":st.column_config.NumberColumn("수량", format="%d주", width="small"), "추천점수":st.column_config.NumberColumn("점수", width="small"), "엔진판단":st.column_config.TextColumn("근거", width="medium")}, use_container_width=True, hide_index=True, height=300)
             f_idx = f_sel.selection.rows[0] if f_sel and f_sel.selection.rows else 0
             
             f_row = df_f.iloc[f_idx]; f_foc = f_row['티커']
             st.divider()
             
-            if "⛔추격금지" in f_row['엔진판단']: st.warning("⚠️ 이미 타점을 크게 초과하여 상승했습니다. 뇌동매매(추격매수)를 금지합니다.")
-            elif "🚫조건미달" in f_row['접근율']: st.warning("⚠️ 역배열(하락추세) 또는 갭상승, 실적 등의 위험이 있어 매수를 금지합니다.")
+            if "🔴 불가" in f_row['상태']: st.warning("⚠️ 역배열(하락추세), 갭상승, 실적 등의 위험이 있어 매수를 금지합니다.")
+            elif "🚀 초과" in f_row['상태']: st.warning("⚠️ 이미 타점을 크게 초과하여 상승했습니다. 뇌동매매(추격매수)를 금지합니다.")
             
             c_ft, c_fb1, c_fb2, c_fg = st.columns([3, 1, 1, 4])
             
             blink_class = "blink-red" if f_row['상승여부'] else "blink-blue"
             with c_ft: 
-                st.markdown(f"<h3 style='margin:0;'>🔍 {f_row['종목명']} <span class='{blink_class}' style='font-size:20px; margin-left:10px;'>{f_row['현재가(등락)'][2:]}</span></h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='margin:0;'>🔍 {f_row['종목명']} <span class='{blink_class}' style='font-size:20px; margin-left:10px;'>${f_row['현재가_수치']:.2f} ({f_row['등락률']})</span></h3>", unsafe_allow_html=True)
                 
             with c_fb1:
                 if st.button("❌ 관심 해제", key=f"fb1_{f_foc}"): toggle_favorite(f_foc); st.rerun()
             with c_fb2:
                 if st.button("🎮 가상 매수", key=f"fb2_{f_foc}", type="primary"):
                     if f_row['권장수량'] > 0: execute_paper_trade({"티커":f_foc, "종목명":f_row['종목명'], "진입가":f_row['현재가_수치'], "수량":f_row['권장수량'], "목표가":f_row['익절가격'], "손절가":f_row['손절가격'], "Bailout":f_row['Bailout'], "진입시간":datetime.now().strftime("%m-%d %H:%M")})
-                    else: st.error("조건 미달 (또는 추격매수 금지구간)")
+                    else: st.error("조건 미달 (또는 금지구간)")
             st.plotly_chart(draw_chart(f_row), use_container_width=True, key=f"c2_{f_foc}", config={'displayModeBar': False})
     else: st.info("관제탑에서 종목을 추가하십시오.")
 
