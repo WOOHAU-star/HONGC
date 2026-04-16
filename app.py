@@ -34,7 +34,7 @@ def save_db():
 # ==========================================
 # 2. 테마 및 UI 스타일 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V32.0 - UX Master", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="APEX V33.0 - Ticker Tape", layout="wide", page_icon="⚖️")
 
 if 'db_loaded' not in st.session_state:
     db_data = load_db()
@@ -71,17 +71,36 @@ st.markdown(f"""
     }}
     .neon-box {{ padding: 15px; border-radius: 8px; background: rgba(0,0,0,0.6); border: 2px solid #00e676; text-align: center; animation: neon 1.5s infinite alternate; font-size: 18px; font-weight: 800; margin-bottom: 20px; }}
     div[role="radiogroup"] {{ justify-content: center; flex-wrap: wrap; gap: 10px; background: {card_bg}; padding: 10px; border-radius: 12px; border: 1px solid {border_color}; margin-bottom: 15px; }}
+    
+    /* 가로 스크롤 전광판 (Ticker Tape) 애니메이션 */
+    @keyframes ticker {{
+        0% {{ transform: translate3d(0, 0, 0); }}
+        100% {{ transform: translate3d(-100%, 0, 0); }}
+    }}
+    .ticker-wrap {{
+        width: 100%; overflow: hidden; box-sizing: border-box;
+        margin-top: 8px; padding-top: 8px; border-top: 1px solid {border_color};
+    }}
+    .ticker-move {{
+        display: inline-block; white-space: nowrap; padding-left: 100%;
+        animation: ticker 15s linear infinite;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
+# 45초 실질 자동 새로고침 타이머
 timer_html = f"""
-<div id="countdown-timer" style="font-family: 'Pretendard', sans-serif; font-size:14px; font-weight:600; color:#4ade80; text-align:right;">30초 후 데이터 갱신 ⏳</div>
+<div id="countdown-timer" style="font-family: 'Pretendard', sans-serif; font-size:13px; font-weight:600; color:#4ade80; text-align:right;">45초 후 갱신 ⏳</div>
 <script>
-    let timeLeft = 30;
+    let timeLeft = 45;
     setInterval(function() {{
         timeLeft -= 1;
-        if(timeLeft <= 0) {{ timeLeft = 30; }}
-        document.getElementById("countdown-timer").innerHTML = timeLeft + "초 후 갱신 ⏳";
+        if(timeLeft <= 0) {{
+            timeLeft = 45;
+            window.parent.location.reload(); // 0초 시 브라우저 강제 새로고침
+        }}
+        let el = document.getElementById("countdown-timer");
+        if(el) {{ el.innerHTML = timeLeft + "초 후 갱신 ⏳"; }}
     }}, 1000);
 </script>
 """
@@ -107,7 +126,7 @@ SECTORS = {
     "🛡️ 보안/클라우드": ["CRWD", "PANW", "FTNT", "NOW", "SNOW", "PLTR", "DDOG", "NET", "ZS", "OKTA"]
 }
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=45)
 def get_macro_indices():
     tickers = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "NASDAQ 100": "^NDX"}
     data = {}
@@ -135,7 +154,7 @@ def get_market_time():
         status, timer = "🟡 프리마켓", f"오픈까지 {diff.seconds//3600}h {(diff.seconds//60)%60}m"
     elif m_open <= now_est <= m_close:
         diff = m_close - now_est
-        status, timer = "🟢 정규장(LIVE)", f"마감까지 {diff.seconds//3600}h {(diff.seconds//60)%60}m"
+        status, timer = "🟢 정규장 (LIVE)", f"마감까지 {diff.seconds//3600}h {(diff.seconds//60)%60}m"
     else:
         next_open = m_open + timedelta(days=1)
         diff = next_open - now_est
@@ -191,12 +210,11 @@ def reset_paper_trades():
 # ==========================================
 # 5. 순수 래리 윌리엄스 엔진
 # ==========================================
-@st.cache_data(ttl=30) 
+@st.cache_data(ttl=45) 
 def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
     results = []
     now = datetime.now()
-    now_est = datetime.now(pytz.timezone('US/Eastern'))
-    today_weekday = now_est.weekday() 
+    today_weekday = datetime.now(pytz.timezone('US/Eastern')).weekday() 
     
     for ticker in tickers:
         try:
@@ -307,7 +325,6 @@ def draw_chart(row_info):
     colors = ['#4ade80' if r['Close'] >= r['Open'] else '#f87171' for i, r in df_chart.iterrows()]
     fig.add_trace(go.Bar(x=df_chart.index, y=df_chart['Volume'], marker_color=colors, name="Volume"), row=2, col=1)
     
-    # [차트 터치/스크롤 100% 잠금 세팅 (모바일 UX 마스터)]
     fig.update_xaxes(rangeslider_visible=False, fixedrange=True)
     fig.update_yaxes(fixedrange=True)
     
@@ -315,39 +332,36 @@ def draw_chart(row_info):
     fig.update_layout(
         template=t_style, height=450, margin=dict(l=0,r=40,t=20,b=0), 
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False,
-        dragmode=False # 모바일 드래그 패닝 완전 방지
+        dragmode=False 
     )
     return fig
 
 # ==========================================
-# 6. UI 렌더링 (슬림형 지수/시간 밴드)
+# 6. UI 렌더링 (전광판 Ticker Tape 변환)
 # ==========================================
 kor_time, m_status, m_timer = get_market_time()
 indices = get_macro_indices()
 
-# 초슬림형 상단 전광판 (모바일 화면공간 절약)
-def format_idx_slim(name, data):
-    color = "#4ade80" if data['pct'] >= 0 else "#f87171"
+# Ticker Tape (가로 스크롤링) HTML 생성
+ticker_items = []
+for name, data in indices.items():
+    c_color = "#4ade80" if data['pct'] >= 0 else "#f87171"
     sign = "+" if data['pct'] >= 0 else ""
-    return f"<span style='font-size:12px; color:{muted_text};'>{name}</span> <span style='font-size:14px; font-weight:800; color:{text_color};'>{data['price']:,.0f}</span> <span style='font-size:12px; font-weight:700; color:{color};'>({sign}{data['pct']:.1f}%)</span>"
+    ticker_items.append(f"<span style='font-size:14px; color:{muted_text}; margin-left:40px;'>{name}</span> <span style='font-size:16px; font-weight:800; color:{text_color};'>{data['price']:,.1f}</span> <span style='font-size:14px; font-weight:700; color:{c_color};'>({sign}{data['pct']:.2f}%)</span>")
+ticker_html = "".join(ticker_items)
 
-sp_data = indices.get("S&P 500", {"price":0, "pct":0})
-nd_data = indices.get("NASDAQ", {"price":0, "pct":0})
-ndx_data = indices.get("NASDAQ 100", {"price":0, "pct":0})
-
+# 초미니멀 상단 헤더 패널
 st.markdown(f"""
-<div style='display:flex; flex-direction:column; background:{card_bg}; padding:8px 12px; border-radius:8px; border:1px solid {border_color}; margin-bottom:15px;'>
-    <div style='display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid {border_color}; padding-bottom:5px; margin-bottom:5px;'>
+<div style='display:flex; flex-direction:column; background:{card_bg}; padding:10px 12px; border-radius:8px; border:1px solid {border_color}; margin-bottom:15px;'>
+    <div style='display:flex; justify-content:space-between; align-items:center;'>
         <div style='font-size:13px; font-weight:600; color:{text_color};'>KOR: <span style='color:{accent_text};'>{kor_time.split(' ')[1]}</span></div>
         <div style='font-size:13px; font-weight:600; color:{text_color};'>{m_status} <span style='color:{muted_text}; font-size:11px;'>({m_timer})</span></div>
-        <div style='font-size:12px; font-weight:600; color:#4ade80;'><span id="countdown-timer">30초 후 갱신</span> ⏳</div>
+        <div style='font-size:12px; font-weight:600; color:#4ade80;'>{timer_html}</div>
     </div>
-    <div style='display:flex; justify-content:space-around; align-items:center;'>
-        {format_idx_slim("S&P500", sp_data)}
-        <div style='border-left:1px solid {border_color}; height:12px;'></div>
-        {format_idx_slim("NASDAQ", nd_data)}
-        <div style='border-left:1px solid {border_color}; height:12px;'></div>
-        {format_idx_slim("NDX100", ndx_data)}
+    <div class="ticker-wrap">
+        <div class="ticker-move">
+            {ticker_html}
+        </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -376,6 +390,7 @@ with tab1:
                             <div style="font-size:14px; line-height:1.7; color:{text_color};">
                                 🎯 진입: <b>${row['매수타점']:.2f}</b> (현재 ${row['현재가']:.2f})<br/>
                                 💰 목표: ${row['익절가격']:.2f} <span style="font-size:12px; color:{accent_text};">(R/R 1:{row['적용R/R']:.1f})</span><br/>
+                                ⏱️ 시간청산: ${row['Bailout']:.2f} <span style="font-size:12px; color:#eab308;">(미결판시)</span><br/>
                                 🔪 손절: ${row['손절가격']:.2f}<br/>
                                 🛒 수량: {row['권장수량']}주<br/>
                                 🔍 근거: <span style="color:#eab308; font-weight:bold;">{row['엔진판단']}</span>
