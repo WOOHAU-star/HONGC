@@ -14,7 +14,7 @@ import uuid
 import time
 
 # ==========================================
-# 0. 중복 접속 차단 (Session Lock) 글로벌 레지스트리
+# 0. 중복 접속 차단 & 실시간 레이더 글로벌 레지스트리
 # ==========================================
 @st.cache_resource
 def get_active_users():
@@ -22,6 +22,14 @@ def get_active_users():
 
 active_users = get_active_users()
 TIMEOUT_SECONDS = 90
+
+# [사전 방어 1 & 2] 유령 접속자 청소 함수 (복사본을 사용하여 충돌 방지)
+def cleanup_active_users():
+    current_time = time.time()
+    # RuntimeError 방지를 위해 list()로 키의 복사본을 만들어 순회
+    for u in list(active_users.keys()):
+        if current_time - active_users[u]['last_seen'] > TIMEOUT_SECONDS:
+            del active_users[u]
 
 # ==========================================
 # 1. 영구 저장소 (Cloud JSONBin)
@@ -125,6 +133,9 @@ url_u = url_params.get('u')
 url_sid = url_params.get('sid')
 current_time = time.time()
 
+# 실행될 때마다 죽은 유저 청소
+cleanup_active_users()
+
 if url_u and url_sid and 'current_user' not in st.session_state:
     record = active_users.get(url_u)
     if record:
@@ -132,13 +143,9 @@ if url_u and url_sid and 'current_user' not in st.session_state:
             st.session_state.current_user = url_u
             st.session_state.session_id = url_sid
         else:
-            if current_time - record['last_seen'] < TIMEOUT_SECONDS:
-                st.error(f"⚠️ '{url_u}' 님은 이미 다른 기기(또는 브라우저)에서 접속 중입니다.")
-                st.info("비정상 종료 시 90초 후에 다시 시도해 주십시오.")
-                st.stop()
-            else:
-                st.session_state.current_user = url_u
-                st.session_state.session_id = url_sid
+            st.error(f"⚠️ '{url_u}' 님은 이미 다른 기기(또는 브라우저)에서 접속 중입니다.")
+            st.info("비정상 종료 시 90초 후에 다시 시도해 주십시오.")
+            st.stop()
     else:
         st.session_state.current_user = url_u
         st.session_state.session_id = url_sid
@@ -150,7 +157,7 @@ if 'current_user' not in st.session_state:
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="여기에 닉네임을 입력하세요 (예: 워런버핏)", label_visibility="collapsed")
+        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="예: 워런버핏, 찰리멍거", label_visibility="collapsed")
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("관제탑 입장하기", type="primary", use_container_width=True):
             if 1 <= len(login_name) <= 8:
@@ -195,7 +202,7 @@ def sync_and_save():
     save_db(st.session_state.full_db)
 
 # ==========================================
-# 5. 사이드바 제어 (유저 정보 표시)
+# 5. 사이드바 제어
 # ==========================================
 with st.sidebar:
     st.markdown(f"""
@@ -221,7 +228,6 @@ with st.sidebar:
     with col_btn:
         search_submit = st.button("추가", use_container_width=True)
         
-    # [버그 해결] st.rerun() 에러 캐칭 우회 (Exception 필터링)
     if search_submit and new_search_ticker:
         if "." in new_search_ticker: st.error("미장 종목만 가능")
         elif new_search_ticker in u_favs: st.warning("이미 등록됨")
@@ -235,7 +241,7 @@ with st.sidebar:
                          st.success(f"{new_search_ticker} 추가!")
                          st.rerun()
                      else: st.error("없는 티커입니다.")
-                 except Exception as e: 
+                 except Exception: 
                      st.error("검증 실패. API 통신 오류일 수 있습니다.")
     
     SECTORS = {
@@ -258,7 +264,7 @@ with st.sidebar:
     new_cap = st.number_input("가용 자산 (USD)", min_value=1000, value=int(u_set.get("total_capital", 100000)), step=5000)
     new_max = st.number_input("분산 종목 수", min_value=1, max_value=20, value=int(u_set.get("max_stocks", 5)))
     new_wgt = st.slider("투입 비중 (%)", 10.0, 100.0, float(u_set.get("weight_pct", 100.0)), 5.0)
-    allocated_per_stock = (new_cap / new_max) * (new_wgt / 100)
+    allocated_per_stock = float(new_cap / new_max) * float(new_wgt / 100)
     
     st.divider()
     st.header("⚙️ 딥 필터")
@@ -272,6 +278,17 @@ with st.sidebar:
         u_set.update({"total_capital": new_cap, "max_stocks": new_max, "weight_pct": new_wgt, "fixed_k": new_k, "stop_loss_pct": new_sl, "base_rr_ratio": new_rr, "gap_limit_pct": new_gap})
         sync_and_save()
 
+    st.divider()
+    # [신규] 실시간 동시 접속자 레이더 패널
+    st.subheader("📡 현재 작전 중인 트레이더")
+    current_active_list = list(active_users.keys())
+    st.markdown(f"<span style='color:{muted_text}; font-size:13px;'>총 {len(current_active_list)}명 접속 중</span>", unsafe_allow_html=True)
+    for u in current_active_list:
+        if u == current_u:
+            st.markdown(f"**🟢 {u} (나)**")
+        else:
+            st.markdown(f"🟢 {u}")
+
 # ==========================================
 # 6. 매크로 및 엔진 모듈
 # ==========================================
@@ -282,9 +299,9 @@ def get_macro_indices():
     for name, ticker in tickers.items():
         try:
             df = yf.Ticker(ticker).history(period="2d")
-            curr, prev = df['Close'].iloc[-1], df['Close'].iloc[-2]
+            curr, prev = float(df['Close'].iloc[-1]), float(df['Close'].iloc[-2])
             data[name] = {"price": curr, "pct": ((curr - prev) / prev) * 100}
-        except Exception: data[name] = {"price": 0, "pct": 0}
+        except Exception: data[name] = {"price": 0.0, "pct": 0.0}
     return data
 
 def get_market_time():
@@ -333,7 +350,7 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             df['VIX_Fix'] = np.where(df['Highest_22'] == 0, 0, (df['Highest_22'] - df['Low']) / df['Highest_22'] * 100)
             
             yest2 = df.iloc[-3]; yest = df.iloc[-2]; today = df.iloc[-1]
-            current = today['Close']; yest_close = yest['Close']
+            current = float(today['Close']); yest_close = float(yest['Close'])
             
             change_pct = ((current - yest_close) / yest_close) * 100 if yest_close > 0 else 0
             is_up = change_pct > 0
@@ -341,18 +358,21 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             elif change_pct < 0: pct_str = f"🔵 {change_pct:.2f}%"
             else: pct_str = "➖ 0.00%"
             
-            ma5 = df['Close'].rolling(window=5).mean().iloc[-1]
-            p_range = yest['High'] - yest['Low']
-            target = today['Open'] + (p_range * k)
+            ma5 = float(df['Close'].rolling(window=5).mean().iloc[-1])
+            p_range = float(yest['High'] - yest['Low'])
+            target = float(today['Open'] + (p_range * k))
             
             atr_pct = (atr_14 / current) * 100 if current > 0 else 0
-            dynamic_rr = base_rr * 1.5 if atr_pct >= 4.0 else (base_rr * 0.8 if atr_pct <= 2.0 else base_rr)
+            dynamic_rr = float(base_rr * 1.5 if atr_pct >= 4.0 else (base_rr * 0.8 if atr_pct <= 2.0 else base_rr))
             
-            stop_loss = target * (1 - (sl_pct / 100)); take_profit = target + ((target - stop_loss) * dynamic_rr); bailout_price = target + 0.01 
-            gap_pct = ((today['Open'] - yest_close) / yest_close) * 100 if yest_close > 0 else 0
+            stop_loss = float(target * (1 - (sl_pct / 100)))
+            take_profit = float(target + ((target - stop_loss) * dynamic_rr))
+            bailout_price = float(target + 0.01)
+            
+            gap_pct = ((float(today['Open']) - yest_close) / yest_close) * 100 if yest_close > 0 else 0
             
             is_gap_danger = gap_pct >= gap_limit
-            is_bull = today['Open'] > ma5
+            is_bull = float(today['Open']) > ma5
             is_hit = current >= target
             is_chasing = current > (target * 1.015) 
             
@@ -371,9 +391,9 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
             elif is_hit: status_lamp = "🟢 진입"; dist_pct_str = "완료"
             else: status_lamp = "🟡 대기"
 
-            is_nr4 = (yest['High'] - yest['Low']) <= (df['High'].iloc[-5:-1] - df['Low'].iloc[-5:-1]).min()
-            is_oops = (today['Open'] < yest['Low']) and (current > yest['Low'])
-            is_will_hook = (yest2['%R'] <= -80) and (yest['%R'] > yest2['%R'])
+            is_nr4 = float(yest['High'] - yest['Low']) <= float((df['High'].iloc[-5:-1] - df['Low'].iloc[-5:-1]).min())
+            is_oops = (float(today['Open']) < float(yest['Low'])) and (current > float(yest['Low']))
+            is_will_hook = float(yest2['%R']) <= -80 and float(yest['%R']) > float(yest2['%R'])
 
             score = 0; reasons = []
             if today_weekday in [1, 2]: score += 15; reasons.append("화/수")
@@ -388,10 +408,10 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
                 if is_nr4: score += 20; reasons.append("⚡NR4")
                 if is_oops: score += 25; reasons.append("🔄OOPS")
                 if is_will_hook: score += 15; reasons.append("🎣%R반전")
-                if df['VIX_Fix'].iloc[-1] >= 12.0: score += 30; reasons.append("🥶VIX바닥")
+                if float(df['VIX_Fix'].iloc[-1]) >= 12.0: score += 30; reasons.append("🥶VIX바닥")
 
             results.append({
-                "티커": ticker, "종목명": TICKER_DICT.get(ticker, ticker),
+                "티커": str(ticker), "종목명": TICKER_DICT.get(ticker, str(ticker)),
                 "상태": status_lamp, "접근율": dist_pct_str, 
                 "현재가": current, "등락률": pct_str, "현재가_수치": current, "상승여부": is_up, 
                 "매수타점": target, "적용R/R": dynamic_rr, "익절가격": take_profit, "손절가격": stop_loss, "Bailout": bailout_price,
@@ -420,8 +440,8 @@ def draw_chart(row_info):
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
     fig.add_trace(go.Bar(x=hist, y=bin_centers, orientation='h', xaxis='x3', yaxis='y', marker=dict(color='rgba(148, 163, 184, 0.15)', line=dict(width=0)), showlegend=False, hoverinfo='none'))
     
-    tp_val, tg_val, sl_val = row_info['익절가격'], row_info['매수타점'], row_info['손절가격']
-    bo_val = row_info['Bailout']
+    tp_val, tg_val, sl_val = float(row_info['익절가격']), float(row_info['매수타점']), float(row_info['손절가격'])
+    bo_val = float(row_info['Bailout'])
     fig.add_hline(y=tp_val, line_dash="solid", line_color="#3b82f6", line_width=1.5, annotation_text=f"TP: ${tp_val:.2f}", annotation_position="top right", row=1, col=1)
     fig.add_hline(y=tg_val, line_dash="dash", line_color="#4ade80", line_width=1.5, annotation_text=f"Target: ${tg_val:.2f}", annotation_position="top right", row=1, col=1)
     fig.add_hline(y=bo_val, line_dash="dot", line_color="#eab308", line_width=1.0, annotation_text=f"Bailout: ${bo_val:.2f}", annotation_position="bottom right", row=1, col=1)
@@ -479,7 +499,7 @@ with tab1:
             df_disp = df_all[['티커', '종목명', '상태', '접근율', '현재가', '등락률', '매수타점', '권장수량', '추천점수', '엔진판단']]
             sel = st.dataframe(df_disp, on_select="rerun", selection_mode="single-row", use_container_width=True, hide_index=True, height=300)
             idx = sel.selection.rows[0] if sel and sel.selection.rows else 0
-            row = df_all.iloc[idx]; focus = row['티커']; is_f = focus in u_favs
+            row = df_all.iloc[idx]; focus = str(row['티커']); is_f = focus in u_favs
             st.divider()
             
             if "🔴 불가" in row['상태']: st.warning("⚠️ 역배열, 갭상승 등의 위험으로 매수 금지.")
@@ -495,9 +515,8 @@ with tab1:
                     sync_and_save(); st.rerun()
             with c_b2:
                 if st.button("🎮 가상 매수", type="primary", key=f"b2_{focus}"):
-                    if row['권장수량'] > 0:
-                        # [버그 해결] Json Type 에러 방지를 위해 강제 형변환(Casting) 주입
-                        u_trades.append({"티커":str(focus), "종목명":str(row['종목명']), "진입가":float(row['현재가_수치']), "수량":int(row['권장수량']), "목표가":float(row['익절가격']), "손절가":float(row['손절가격']), "Bailout":float(row['Bailout']), "진입시간":datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m-%d %H:%M")})
+                    if int(row['권장수량']) > 0:
+                        u_trades.append({"티커":str(focus), "종목명":str(row['종목명']), "진입가":float(row['현재가_수치']), "수량":int(row['권장수량']), "목표가":float(row['익절가격']), "손절가":float(row['손절가격']), "Bailout":float(row['Bailout']), "진입시간":str(datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m-%d %H:%M"))})
                         sync_and_save(); st.success("체결됨!")
                     else: st.error("금지 구간")
             st.plotly_chart(draw_chart(row), use_container_width=True, key=f"c1_{focus}", config={'displayModeBar': False})
@@ -510,7 +529,7 @@ with tab2:
         if not df_f.empty:
             f_sel = st.dataframe(df_f[['티커', '종목명', '상태', '접근율', '현재가', '등락률', '매수타점', '권장수량', '추천점수', '엔진판단']], on_select="rerun", selection_mode="single-row", use_container_width=True, hide_index=True, height=300)
             f_idx = f_sel.selection.rows[0] if f_sel and f_sel.selection.rows else 0
-            f_row = df_f.iloc[f_idx]; f_foc = f_row['티커']
+            f_row = df_f.iloc[f_idx]; f_foc = str(f_row['티커'])
             st.divider()
             
             c_ft, c_fb1, c_fb2, c_fg = st.columns([3, 1, 1, 4])
@@ -520,9 +539,8 @@ with tab2:
                 if st.button("❌ 관심 해제", key=f"fb1_{f_foc}"): u_favs.remove(f_foc); sync_and_save(); st.rerun()
             with c_fb2:
                 if st.button("🎮 가상 매수", key=f"fb2_{f_foc}", type="primary"):
-                    if f_row['권장수량'] > 0: 
-                        # [버그 해결] Json Type 에러 방지용 형변환
-                        u_trades.append({"티커":str(f_foc), "종목명":str(f_row['종목명']), "진입가":float(f_row['현재가_수치']), "수량":int(f_row['권장수량']), "목표가":float(f_row['익절가격']), "손절가":float(f_row['손절가격']), "Bailout":float(f_row['Bailout']), "진입시간":datetime.now().strftime("%m-%d %H:%M")})
+                    if int(f_row['권장수량']) > 0: 
+                        u_trades.append({"티커":str(f_foc), "종목명":str(f_row['종목명']), "진입가":float(f_row['현재가_수치']), "수량":int(f_row['권장수량']), "목표가":float(f_row['익절가격']), "손절가":float(f_row['손절가격']), "Bailout":float(f_row['Bailout']), "진입시간":str(datetime.now().strftime("%m-%d %H:%M"))})
                         sync_and_save(); st.success("체결됨!")
                     else: st.error("조건 미달")
             st.plotly_chart(draw_chart(f_row), use_container_width=True, key=f"c2_{f_foc}", config={'displayModeBar': False})
@@ -537,13 +555,13 @@ with tab3:
         if u_trades:
             pdf = pd.DataFrame(u_trades)
             for t in pdf['티커'].unique():
-                try: pdf.loc[pdf['티커']==t, '현재'] = yf.Ticker(t).history(period="1d")['Close'].iloc[-1]
-                except Exception: pdf.loc[pdf['티커']==t, '현재'] = 0
+                try: pdf.loc[pdf['티커']==t, '현재'] = float(yf.Ticker(t).history(period="1d")['Close'].iloc[-1])
+                except Exception: pdf.loc[pdf['티커']==t, '현재'] = 0.0
             pdf['수익($)'] = (pdf['현재'] - pdf['진입가']) * pdf['수량']
             pdf['수익률(%)'] = ((pdf['현재'] - pdf['진입가']) / pdf['진입가']) * 100
-            pnl = pdf['수익($)'].sum()
-            my_total_invested = (pdf['진입가']*pdf['수량']).sum()
-            my_total_pct = (pnl/my_total_invested)*100 if my_total_invested > 0 else 0
+            pnl = float(pdf['수익($)'].sum())
+            my_total_invested = float((pdf['진입가']*pdf['수량']).sum())
+            my_total_pct = float((pnl/my_total_invested)*100) if my_total_invested > 0 else 0.0
             pnl_c = "#ef5350" if pnl >= 0 else "#42a5f5"
             
             st.markdown(f"<div style='background:{card_bg}; padding:15px; border-radius:10px; text-align:center; border:1px solid {border_color};'><div style='font-size:24px; font-weight:900; color:{pnl_c};'>내 총 수익: ${pnl:,.2f} ({my_total_pct:.2f}%)</div></div>", unsafe_allow_html=True)
@@ -560,17 +578,17 @@ with tab3:
             trds = udata.get("paper_trades", [])
             if not trds: continue
             
-            u_pnl = 0
-            u_invested = 0
+            u_pnl = 0.0
+            u_invested = 0.0
             for trd in trds:
                 try:
-                    curr_price = yf.Ticker(trd["티커"]).history(period="1d")['Close'].iloc[-1]
-                    u_pnl += (curr_price - trd["진입가"]) * trd["수량"]
-                    u_invested += trd["진입가"] * trd["수량"]
+                    curr_price = float(yf.Ticker(trd["티커"]).history(period="1d")['Close'].iloc[-1])
+                    u_pnl += (curr_price - float(trd["진입가"])) * int(trd["수량"])
+                    u_invested += float(trd["진입가"]) * int(trd["수량"])
                 except Exception: pass
                 
-            u_pct = (u_pnl / u_invested) * 100 if u_invested > 0 else 0
-            leaderboard.append({"트레이더": uname, "총 수익금": u_pnl, "수익률": u_pct})
+            u_pct = float((u_pnl / u_invested) * 100) if u_invested > 0 else 0.0
+            leaderboard.append({"트레이더": str(uname), "총 수익금": u_pnl, "수익률": u_pct})
 
         if leaderboard:
             ldf = pd.DataFrame(leaderboard).sort_values(by="총 수익금", ascending=False).reset_index(drop=True)
