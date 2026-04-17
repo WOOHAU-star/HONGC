@@ -54,6 +54,7 @@ def load_db():
                 db_data = json.load(f)
         except: pass
 
+    # [마이그레이션] 구형 데이터를 신형(유저별 파티션)으로 변환
     if "users" not in db_data:
         old_data = db_data.copy()
         db_data = {"users": {"Admin": {"favorites": old_data.get("favorites", []), "paper_trades": old_data.get("paper_trades", []), "settings": old_data.get("settings", {"total_capital": 100000, "max_stocks": 5, "weight_pct": 100.0, "fixed_k": 0.5, "stop_loss_pct": 4.0, "base_rr_ratio": 2.0, "gap_limit_pct": 2.0})}}}
@@ -85,7 +86,7 @@ def save_db(full_db):
 # ==========================================
 # 2. 테마 및 페이지 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V49.0 - Secure Quant", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="APEX V49.0 - Larry Williams", layout="wide", page_icon="⚖️")
 
 if 'full_db' not in st.session_state:
     st.session_state.full_db = load_db()
@@ -152,13 +153,13 @@ if url_u and url_sid and 'current_user' not in st.session_state:
 
 # --- 로그인 화면 (세션이 없을 때만 표시) ---
 if 'current_user' not in st.session_state:
-    st.markdown("<br><br><h1 style='text-align:center;'>🚀 APEX QUANT 관제탑</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center; color:{muted_text};'>자신만의 트레이더 닉네임(1~8자)을 입력하여 개인 관제탑을 엽니다.<br>비밀번호는 없으나 중복 접속은 차단됩니다.</p>", unsafe_allow_html=True)
+    st.markdown("<br><br><h1 style='text-align:center;'>🇺🇸 Larry Williams' Investment Method</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align:center; color:{muted_text};'>자신만의 트레이더 닉네임(한글/영문 1~8자)을 입력하여 개인 관제탑을 엽니다.<br>비밀번호는 없으나 중복 접속은 차단됩니다.</p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown(f"<div style='background:{card_bg}; padding:30px; border-radius:15px; border:1px solid {border_color};'>", unsafe_allow_html=True)
-        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="예: 무적단타")
+        login_name = st.text_input("트레이더 닉네임 (별명)", max_chars=8, placeholder="예: 무적단타, Admin")
         
         if st.button("관제탑 입장하기", type="primary", use_container_width=True):
             if 1 <= len(login_name) <= 8:
@@ -479,7 +480,7 @@ full_ticker_str = f"{single_ticker_str} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&
 st.markdown(f"""<div class="ticker-wrap"><div class="ticker-move">{full_ticker_str}</div></div>""", unsafe_allow_html=True)
 
 selected_sector = st.radio("🔭 섹터", list(SECTORS.keys()), horizontal=True, label_visibility="collapsed")
-tab1, tab2, tab3 = st.tabs(["📊 관제탑", "⭐ 내 관심종목", "🏆 명예의 전당"])
+tab1, tab2, tab3 = st.tabs(["📊 관제탑", "⭐ 내 관심종목", "🎮 내 계좌 & 🏆 리그"])
 
 # ----------------- TAB 1: 관제탑 -----------------
 with tab1:
@@ -520,7 +521,7 @@ with tab1:
             with c_b2:
                 if st.button("🎮 가상 매수", type="primary", key=f"b2_{focus}"):
                     if row['권장수량'] > 0: 
-                        u_trades.append({"티커":focus, "종목명":row['종목명'], "진입가":row['현재가_수치'], "수량":row['권장수량'], "목표가":row['익절가격'], "손절가":row['손절가격'], "Bailout":row['Bailout'], "진입시간":datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m-%d %H:%M")})
+                        u_trades.append({"티커":focus, "종목명":row['종목명'], "진입가":row['현재가_수치'], "수량":row['권장수량'], "목표가":row['익절가격'], "손절가":row['손절가격'], "Bailout":row['Bailout'], "진입시간":datetime.now().strftime("%m-%d %H:%M")})
                         sync_and_save(); st.success("체결됨!")
                     else: st.error("금지 구간")
             st.plotly_chart(draw_chart(row), use_container_width=True, key=f"c1_{focus}", config={'displayModeBar': False})
@@ -544,7 +545,7 @@ with tab2:
             with c_fb2:
                 if st.button("🎮 가상 매수", key=f"fb2_{f_foc}", type="primary"):
                     if f_row['권장수량'] > 0: 
-                        u_trades.append({"티커":f_foc, "종목명":f_row['종목명'], "진입가":f_row['현재가_수치'], "수량":f_row['권장수량'], "목표가":f_row['익절가격'], "손절가":f_row['손절가격'], "Bailout":f_row['Bailout'], "진입시간":datetime.now().strftime("%m-%d %H:%M")})
+                        u_trades.append({"티커":f_foc, "종목명":f_row['종목명'], "진입가":row['현재가_수치'], "수량":f_row['권장수량'], "목표가":f_row['익절가격'], "손절가":f_row['손절가격'], "Bailout":f_row['Bailout'], "진입시간":datetime.now().strftime("%m-%d %H:%M")})
                         sync_and_save(); st.success("체결됨!")
                     else: st.error("조건 미달")
             st.plotly_chart(draw_chart(f_row), use_container_width=True, key=f"c2_{f_foc}", config={'displayModeBar': False})
@@ -552,53 +553,54 @@ with tab2:
 
 # ----------------- TAB 3: 모의투자 & 명예의 전당 -----------------
 with tab3:
-    st.subheader("🎮 내 모의투자 계좌")
-    if u_trades:
-        pdf = pd.DataFrame(u_trades)
-        for t in pdf['티커'].unique():
-            try: pdf.loc[pdf['티커']==t, '현재'] = yf.Ticker(t).history(period="1d")['Close'].iloc[-1]
-            except: pdf.loc[pdf['티커']==t, '현재'] = 0
-        pdf['수익($)'] = (pdf['현재'] - pdf['진입가']) * pdf['수량']
-        pdf['수익률(%)'] = ((pdf['현재'] - pdf['진입가']) / pdf['진입가']) * 100
-        pnl = pdf['수익($)'].sum()
-        my_total_invested = (pdf['진입가']*pdf['수량']).sum()
-        my_total_pct = (pnl/my_total_invested)*100 if my_total_invested > 0 else 0
-        pnl_c = "#ef5350" if pnl >= 0 else "#42a5f5"
-        
-        st.markdown(f"<div style='background:{card_bg}; padding:15px; border-radius:10px; text-align:center;'><div style='font-size:24px; font-weight:900; color:{pnl_c};'>내 총 수익: ${pnl:,.2f} ({my_total_pct:.2f}%)</div></div>", unsafe_allow_html=True)
-        st.dataframe(pdf, column_config={"수익률(%)":st.column_config.ProgressColumn("수익률", format="%.2f%%", min_value=-10, max_value=10)}, use_container_width=True, hide_index=True)
-        if st.button("🗑️ 전체 리셋 (내 계좌만)"): u_trades.clear(); sync_and_save(); st.rerun()
-    else: st.info("보유 중인 모의투자 종목이 없습니다.")
-
-    st.divider()
+    col_my, col_league = st.columns([2, 1])
     
-    st.subheader("🏆 퀀트 리그 (명예의 전당)")
-    all_users = st.session_state.full_db.get("users", {})
-    leaderboard = []
-    
-    for uname, udata in all_users.items():
-        trds = udata.get("paper_trades", [])
-        if not trds: continue
-        
-        u_pnl = 0
-        u_invested = 0
-        for trd in trds:
-            try:
-                curr_price = yf.Ticker(trd["티커"]).history(period="1d")['Close'].iloc[-1]
-                u_pnl += (curr_price - trd["진입가"]) * trd["수량"]
-                u_invested += trd["진입가"] * trd["수량"]
-            except: pass
+    with col_my:
+        st.subheader("🎮 내 모의투자 계좌")
+        if u_trades:
+            pdf = pd.DataFrame(u_trades)
+            for t in pdf['티커'].unique():
+                try: pdf.loc[pdf['티커']==t, '현재'] = yf.Ticker(t).history(period="1d")['Close'].iloc[-1]
+                except: pdf.loc[pdf['티커']==t, '현재'] = 0
+            pdf['수익($)'] = (pdf['현재'] - pdf['진입가']) * pdf['수량']
+            pdf['수익률(%)'] = ((pdf['현재'] - pdf['진입가']) / pdf['진입가']) * 100
+            pnl = pdf['수익($)'].sum()
+            my_total_invested = (pdf['진입가']*pdf['수량']).sum()
+            my_total_pct = (pnl/my_total_invested)*100 if my_total_invested > 0 else 0
+            pnl_c = "#ef5350" if pnl >= 0 else "#42a5f5"
             
-        u_pct = (u_pnl / u_invested) * 100 if u_invested > 0 else 0
-        leaderboard.append({"트레이더": uname, "총 수익금": u_pnl, "수익률": u_pct})
+            st.markdown(f"<div style='background:{card_bg}; padding:15px; border-radius:10px; text-align:center; border:1px solid {border_color};'><div style='font-size:24px; font-weight:900; color:{pnl_c};'>내 총 수익: ${pnl:,.2f} ({my_total_pct:.2f}%)</div></div>", unsafe_allow_html=True)
+            st.dataframe(pdf[['티커', '종목명', '진입가', '현재', '수량', '수익($)', '수익률(%)']], column_config={"수익률(%)":st.column_config.ProgressColumn("수익률", format="%.2f%%", min_value=-10, max_value=10)}, use_container_width=True, hide_index=True)
+            if st.button("🗑️ 전체 리셋 (내 계좌만)"): u_trades.clear(); sync_and_save(); st.rerun()
+        else: st.info("보유 중인 모의투자 종목이 없습니다.")
 
-    if leaderboard:
-        # [수정] 지난 버전의 KeyError 버그 완벽 해결
-        ldf = pd.DataFrame(leaderboard).sort_values(by="총 수익금", ascending=False).reset_index(drop=True)
-        ldf.index = ldf.index + 1
-        st.dataframe(ldf, column_config={"총 수익금": st.column_config.NumberColumn("수익금($)", format="$%.2f"), "수익률": st.column_config.NumberColumn("수익률(%)", format="%.2f%%")}, use_container_width=True)
-    else:
-        st.info("아직 투자 기록이 등록된 트레이더가 없습니다.")
+    with col_league:
+        st.subheader("🏆 퀀트 리그 (명예의 전당)")
+        all_users = st.session_state.full_db.get("users", {})
+        leaderboard = []
+        
+        for uname, udata in all_users.items():
+            trds = udata.get("paper_trades", [])
+            if not trds: continue
+            
+            u_pnl = 0
+            u_invested = 0
+            for trd in trds:
+                try:
+                    curr_price = yf.Ticker(trd["티커"]).history(period="1d")['Close'].iloc[-1]
+                    u_pnl += (curr_price - trd["진입가"]) * trd["수량"]
+                    u_invested += trd["진입가"] * trd["수량"]
+                except: pass
+                
+            u_pct = (u_pnl / u_invested) * 100 if u_invested > 0 else 0
+            leaderboard.append({"트레이더": uname, "총 수익금": u_pnl, "수익률": u_pct})
+
+        if leaderboard:
+            ldf = pd.DataFrame(leaderboard).sort_values(by="총 수익금", ascending=False).reset_index(drop=True)
+            ldf.index = ldf.index + 1
+            st.dataframe(ldf[['트레이더', '총 수익금', '수익률']], column_config={"총 수익금": st.column_config.NumberColumn("수익금($)", format="$%.2f"), "수익률": st.column_config.NumberColumn("수익률(%)", format="%.2f%%")}, use_container_width=True)
+        else:
+            st.info("기록이 없습니다.")
 
 st.divider()
 
