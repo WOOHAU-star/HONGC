@@ -30,7 +30,7 @@ def cleanup_active_users():
             del active_users[u]
 
 # ==========================================
-# 1. 영구 저장소 (Cloud JSONBin)
+# 1. 영구 저장소 (Cloud JSONBin) - 모의투자 및 랭킹 완전 파기
 # ==========================================
 DB_FILE = "apex_database.json"
 
@@ -89,7 +89,7 @@ def save_db(full_db):
 # ==========================================
 # 2. 테마 및 페이지 세팅 (초경량 다크 UI)
 # ==========================================
-st.set_page_config(page_title="APEX QUANT", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="APEX QUANT SCANNER", layout="wide", page_icon="🚀")
 
 if 'full_db' not in st.session_state: st.session_state.full_db = load_db()
 
@@ -108,6 +108,7 @@ st.markdown(f"""
     .metric-card {{ background: {card_bg}; border: 1px solid {border_color}; border-radius: 12px; padding: 15px; text-align: center; margin-bottom: 10px; }}
     .metric-title {{ font-size: 12px; color: {muted_text}; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }}
     
+    /* 타점 도달 네온사인 복구 */
     @keyframes neon {{
         0% {{ box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); border-color: #ef4444; }}
         100% {{ box-shadow: 0 0 15px rgba(239, 68, 68, 0.8); border-color: #fca5a5; }}
@@ -118,6 +119,7 @@ st.markdown(f"""
     div[data-baseweb="input"] > div {{ border-radius: 8px; background-color: {card_bg}; border-color: {border_color}; }}
     div[data-baseweb="select"] > div {{ border-radius: 8px; background-color: {card_bg}; border-color: {border_color}; }}
     
+    /* 미니멀 헤더 티커 */
     .ticker-wrap {{ width: 100%; overflow: hidden; background: #070a12; padding: 4px 0; border-bottom: 1px solid {border_color}; margin-bottom: 10px; }}
     .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 120s linear infinite; font-size: 12px; font-weight: 700; }}
     @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-150%); }} }}
@@ -125,7 +127,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 (여백 최소화)
+# 3. 로그인 (자동 세션 락)
 # ==========================================
 url_params = st.query_params
 url_u = url_params.get('u')
@@ -143,11 +145,12 @@ if url_u and url_sid and 'current_user' not in st.session_state:
         st.session_state.current_user = url_u; st.session_state.session_id = url_sid
 
 if 'current_user' not in st.session_state:
-    st.markdown("<h1 style='text-align:center; font-weight:900; font-size:32px; letter-spacing:1px; margin-top:20px;'>APEX <span style='color:#667eea;'>SCANNER</span></h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center; color:{muted_text}; font-size:14px;'>실전 전술 스캐너 접속</p>", unsafe_allow_html=True)
+    st.markdown("<br><br><br><h1 style='text-align:center; font-weight:900; font-size:32px; letter-spacing:1px;'>APEX <span style='color:#667eea;'>SCANNER</span></h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align:center; color:{muted_text}; font-size:14px;'>실전 전술 스캐너 접속</p><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="Callsign 입력", label_visibility="collapsed")
+        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("CONNECT 🚀", type="primary", use_container_width=True):
             if 1 <= len(login_name) <= 8:
                 rec = active_users.get(login_name)
@@ -189,7 +192,7 @@ SECTORS = {
     "☁️ 클라우드 & SW": ["SHOP", "UBER", "MNDY", "TEAM", "NET", "DOCN", "CFLT", "MDB", "PATH", "ESTC", "DT", "HCP", "FIVN", "SMAR", "AYX", "BOX", "PD", "ZEN", "DBX", "WK"],
     "🚀 우주항공 & 방산": ["LMT", "RTX", "NOC", "GD", "BA", "TDG", "HEI", "HII", "TXT", "LHX", "KTOS", "CUB", "KAMN", "AJRD", "AVAV", "MOG-A", "ATRO", "SPCE", "RKLB", "ASTS"],
     "🛒 이커머스 & 소비재": ["WMT", "HD", "PG", "COST", "TGT", "KO", "PEP", "MCD", "NKE", "SBUX", "MELI", "SE", "CPNG", "EBAY", "ETSY", "WAY", "CHWY", "PINS", "FTCH", "W"],
-    "⚡ 에너지 & 친환경": ["XOM", "CVX", "SHEL", "COP", "TTE", "BP", "EQNR", "OXY", "EOG", "FSLR", "SEDG", "DQ", "SPWR", "NEP", "BEP", "CWEN", "HASI", "AY", "PEGI"]
+    "⚡ 에너지 & 친환경": ["XOM", "CVX", "CVX", "SHEL", "COP", "TTE", "BP", "EQNR", "OXY", "EOG", "FSLR", "SEDG", "DQ", "SPWR", "NEP", "BEP", "CWEN", "HASI", "AY", "PEGI"]
 }
 
 # ==========================================
@@ -234,7 +237,7 @@ with st.sidebar:
         st.markdown(f"<span style='color:{'#10b981' if u==current_u else muted_text}; font-size:12px;'>● {u}</span>", unsafe_allow_html=True)
 
 # ==========================================
-# 6. 스캔 엔진 및 1980 버그 해결 차트
+# 6. 스캔 엔진 및 1980 버그 해결 차트 (No-Zoom Lock, 볼륨+매물대 복구)
 # ==========================================
 @st.cache_data(ttl=60)
 def get_macro_indices():
@@ -312,7 +315,7 @@ def draw_tactical_chart(ticker, target, tp, sl):
         fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], increasing_line_color='#ef4444', decreasing_line_color='#3b82f6', showlegend=False), row=1, col=1)
         fig.add_trace(go.Scatter(x=df.index, y=df['Close'].rolling(5).mean(), line=dict(color='#eab308', width=1.5), name='5MA', showlegend=False), row=1, col=1)
         
-        # 2. 매물대 (오류 방어)
+        # 2. 매물대 정밀화 (nbins=24, 투명도 조정)
         try:
             bins = np.linspace(df['Low'].min(), df['High'].max(), 24) 
             hist, bin_edges = np.histogram(df['Close'], bins=bins, weights=df['Volume'])
@@ -322,7 +325,7 @@ def draw_tactical_chart(ticker, target, tp, sl):
         except Exception:
             max_hist = 1
         
-        # 3. 한국형 거래량
+        # 3. 한국형 거래량 바 (상승:빨강 / 하락:파랑) 복구
         v_colors = ['#ef4444' if row['Close'] >= row['Open'] else '#3b82f6' for _, row in df.iterrows()]
         fig.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color=v_colors, showlegend=False), row=2, col=1)
         
@@ -331,7 +334,7 @@ def draw_tactical_chart(ticker, target, tp, sl):
         fig.add_hline(y=target, line_dash="dash", line_color="#10b981", annotation_text=f"ENTRY {target:.2f}", row=1, col=1)
         fig.add_hline(y=sl, line_dash="solid", line_color="#ef4444", annotation_text=f"SL {sl:.2f}", row=1, col=1)
         
-        # 5. [줌 잠금 & X축 문자열(Category) 고정]
+        # 5. [줌 잠금 완벽 적용 & X축 문자열(Category) 고정]
         fig.update_xaxes(type='category', rangeslider_visible=False, fixedrange=True, row=1, col=1)
         fig.update_xaxes(type='category', rangeslider_visible=False, fixedrange=True, row=2, col=1)
         fig.update_yaxes(fixedrange=True, row=1, col=1)
@@ -364,11 +367,11 @@ else:
         df_all = get_ranking_data(scan_list, new_k, new_sl, new_rr)
     
     if not df_all.empty:
-        # 네온사인 경고 (타점 도달)
+        # 네온사인 경고 (타점 도달) 복구
         hits = df_all[df_all['Signal'] == '🎯 BUY']['Ticker'].tolist()
         if hits:
             hit_str = ", ".join(hits)
-            st.markdown(f"<div class='neon-alert'>🔥 타점 도달: {hit_str} 진입 구간!</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='neon-alert'>🔥 타점 도달: {hit_str} 진입 구간!</div>", unsafe_alert=True)
 
         disp_df = df_all[['Ticker', 'Price', 'Change', 'Signal']].copy()
         
@@ -383,7 +386,7 @@ else:
         idx = sel.selection.rows[0] if sel and sel.selection.rows else 0
         row = df_all.iloc[idx]; focus = str(row['Ticker'])
         
-        # 인라인 정보창
+        # [V56.0 컴팩트 개편] 한 줄짜리 초압축 인라인 정보창
         st.markdown(f"""
         <div style="display:flex; justify-content:space-around; align-items:center; background:{card_bg}; padding:10px; border-radius:8px; border:1px solid {border_color}; margin-top:10px; margin-bottom:10px;">
             <span style="font-size:18px; font-weight:900; color:#667eea;">{focus}</span>
@@ -393,7 +396,7 @@ else:
         </div>
         """, unsafe_allow_html=True)
         
-        # 무결점 차트 출력
+        # 무결점 차트 출력 (No-Zoom Lock, 한국형 컬러 적용)
         st.plotly_chart(draw_tactical_chart(focus, row['Target'], row['TP'], row['SL']), use_container_width=True, config={'displayModeBar': False})
         
     else: st.info("스캔 결과가 없거나 통신 지연입니다.")
