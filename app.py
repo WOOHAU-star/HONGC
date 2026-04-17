@@ -61,7 +61,7 @@ def load_db():
 
     if "users" not in db_data:
         old_data = db_data.copy()
-        db_data = {"users": {"Admin": {"favorites": old_data.get("favorites", []), "paper_trades": old_data.get("paper_trades", []), "settings": old_data.get("settings", {"total_capital": 100000, "max_stocks": 5, "weight_pct": 100.0, "fixed_k": 0.5, "stop_loss_pct": 4.0, "base_rr_ratio": 2.0, "gap_limit_pct": 2.0})}}}
+        db_data = {"users": {"Admin": {"favorites": [], "paper_trades": [], "settings": {"total_capital": 100000, "max_stocks": 5, "weight_pct": 100.0, "fixed_k": 0.5, "stop_loss_pct": 4.0, "base_rr_ratio": 2.0, "gap_limit_pct": 2.0}}}}
     return db_data
 
 def save_db(full_db):
@@ -87,9 +87,9 @@ def save_db(full_db):
         json.dump(full_db, f, ensure_ascii=False, indent=4)
 
 # ==========================================
-# 2. 테마 및 페이지 세팅 (블룸버그 다크모드)
+# 2. 테마 및 페이지 세팅
 # ==========================================
-st.set_page_config(page_title="APEX QUANT Dashboard", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="APEX QUANT", layout="wide", page_icon="🚀")
 
 if 'full_db' not in st.session_state: st.session_state.full_db = load_db()
 
@@ -97,9 +97,6 @@ bg_color = "#0b101e"
 text_color = "#e2e8f0"
 card_bg = "#151b2b"
 border_color = "#1e293b"
-accent_blue = "#3b82f6"
-accent_green = "#10b981"
-accent_red = "#ef4444"
 muted_text = "#64748b"
 
 st.markdown(f"""
@@ -108,31 +105,24 @@ st.markdown(f"""
     html, body, [class*="css"]  {{ font-family: 'Pretendard', sans-serif !important; background-color: {bg_color}; color: {text_color}; }}
     .stApp {{ background-color: {bg_color}; }}
     
-    /* V52.0 Card Styles */
-    .metric-card {{ background: {card_bg}; border: 1px solid {border_color}; border-radius: 12px; padding: 15px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }}
-    .metric-title {{ font-size: 13px; color: {muted_text}; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }}
-    .metric-value {{ font-size: 24px; font-weight: 900; color: #fff; margin-bottom: 5px; }}
+    /* UI 개편 스타일 */
+    .metric-card {{ background: {card_bg}; border: 1px solid {border_color}; border-radius: 12px; padding: 15px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 10px; }}
+    .metric-title {{ font-size: 12px; color: {muted_text}; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }}
+    .metric-value {{ font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 5px; }}
+    .metric-sub {{ font-size: 14px; font-weight: 600; }}
     
-    /* Signal Badges */
-    .badge-buy {{ background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 12px; border: 1px solid #10b981; }}
-    .badge-over {{ background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 12px; border: 1px solid #ef4444; }}
-    .badge-wait {{ background: rgba(100, 116, 139, 0.2); color: #94a3b8; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 12px; border: 1px solid #64748b; }}
+    /* 텍스트 인풋 & 버튼 */
+    div[data-testid="stButton"] button[kind="primary"] {{ background: linear-gradient(90deg, #2563eb, #3b82f6); color: white; font-weight: 900; border: none; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }}
     
-    /* Glowing Button */
-    div[data-testid="stButton"] button[kind="primary"] {{
-        background: linear-gradient(90deg, #2563eb, #3b82f6); color: white; font-weight: 900; border: none; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); transition: all 0.3s ease;
-    }}
-    div[data-testid="stButton"] button[kind="primary"]:hover {{ box-shadow: 0 0 25px rgba(59, 130, 246, 0.8); transform: scale(1.02); }}
-
     /* Ticker Tape */
-    .ticker-wrap {{ width: 100%; overflow: hidden; background: #000; padding: 6px 0; border-bottom: 1px solid {border_color}; margin-bottom: 20px; }}
+    .ticker-wrap {{ width: 100%; overflow: hidden; background: #000; padding: 6px 0; border-bottom: 1px solid {border_color}; margin-bottom: 15px; }}
     .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 120s linear infinite; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; }}
     @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-150%); }} }}
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 네이티브 로그인 (CORS 프리)
+# 3. 로그인
 # ==========================================
 url_params = st.query_params
 url_u = url_params.get('u')
@@ -142,20 +132,19 @@ cleanup_active_users()
 
 if url_u and url_sid and 'current_user' not in st.session_state:
     record = active_users.get(url_u)
-    if record:
-        if record['sid'] == url_sid:
-            st.session_state.current_user = url_u; st.session_state.session_id = url_sid
-        else:
-            st.error(f"⚠️ '{url_u}' 님은 이미 다른 기기에서 접속 중입니다."); st.stop()
+    if record and record['sid'] == url_sid:
+        st.session_state.current_user = url_u; st.session_state.session_id = url_sid
+    elif record and current_time - record['last_seen'] < TIMEOUT_SECONDS:
+        st.error(f"⚠️ '{url_u}' 님은 이미 다른 기기에서 접속 중입니다."); st.stop()
     else:
         st.session_state.current_user = url_u; st.session_state.session_id = url_sid
 
 if 'current_user' not in st.session_state:
-    st.markdown("<br><br><br><h1 style='text-align:center; font-weight:900; letter-spacing:2px;'>APEX <span style='color:#3b82f6;'>QUANT</span></h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center; color:{muted_text};'>SECURE TACTICAL DASHBOARD</p><br>", unsafe_allow_html=True)
+    st.markdown("<br><br><br><h1 style='text-align:center; font-weight:900; letter-spacing:1px;'>APEX <span style='color:#3b82f6;'>QUANT</span></h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align:center; color:{muted_text};'>TACTICAL RADAR ON</p><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="Callsign 입력 (예: Maverick)", label_visibility="collapsed")
+        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="닉네임 입력", label_visibility="collapsed")
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("SYSTEM INITIALIZE 🚀", type="primary", use_container_width=True):
             if 1 <= len(login_name) <= 8:
@@ -187,20 +176,20 @@ def sync_and_save():
     save_db(st.session_state.full_db)
 
 # ==========================================
-# 4. 사이드바 (Tactical Control)
+# 4. 사이드바
 # ==========================================
 with st.sidebar:
-    st.markdown(f"<div class='metric-card'><h3 style='margin:0; color:#fff;'>🕵️ {current_u}</h3><p style='margin:0; font-size:12px; color:#10b981;'>● SECURE CONNECTION</p></div><br>", unsafe_allow_html=True)
+    st.markdown(f"<div class='metric-card'><h3 style='margin:0; color:#fff;'>🕵️ {current_u}</h3><p style='margin:0; font-size:12px; color:#10b981;'>● SECURE CONNECTION</p></div>", unsafe_allow_html=True)
     if st.button("로그아웃 (DISCONNECT)", use_container_width=True):
         if current_u in active_users: del active_users[current_u]
         del st.session_state.current_user; del st.session_state.session_id; st.query_params.clear(); st.rerun()
     
     st.divider()
-    st.markdown("<div class='metric-title'>Add Target (US)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-title'>종목 검색 (ADD)</div>", unsafe_allow_html=True)
     c1, c2 = st.columns([3, 1])
     with c1: new_search = st.text_input("Ticker", label_visibility="collapsed").upper()
     with c2: 
-        if st.button("ADD", use_container_width=True) and new_search:
+        if st.button("➕", use_container_width=True) and new_search:
             if "." not in new_search and new_search not in u_favs:
                 try:
                     if not yf.Ticker(new_search).history(period="1d").empty:
@@ -209,22 +198,22 @@ with st.sidebar:
     
     SECTORS = {
         "🌟 Big Tech": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA"],
-        "💻 AI/Semi": ["AMD", "TSM", "ASML", "ARM", "SMCI", "KLAC"],
-        "⚡ EV/Energy": ["RIVN", "LCID", "F", "NIO", "XOM"]
+        "💻 AI/Semi": ["AMD", "TSM", "ASML", "ARM", "SMCI"],
+        "⚡ EV/Energy": ["RIVN", "LCID", "NIO"]
     }
     all_tickers = list(set([t for v in SECTORS.values() for t in v] + u_favs))
-    st.markdown("<br><div class='metric-title'>Remove Targets</div>", unsafe_allow_html=True)
+    st.markdown("<br><div class='metric-title'>관심종목 관리 (REMOVE)</div>", unsafe_allow_html=True)
     new_favs = st.multiselect("Edit Watchlist", options=all_tickers, default=u_favs, label_visibility="collapsed")
     if new_favs != u_favs: u_data["favorites"] = new_favs; u_favs = new_favs; sync_and_save()
         
     st.divider()
-    st.markdown("<div class='metric-title'>Capital Config</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-title'>자산 통제 (CAPITAL)</div>", unsafe_allow_html=True)
     new_cap = st.number_input("Capital ($)", min_value=1000, value=int(u_set.get("total_capital", 100000)), step=5000)
-    new_max = st.number_input("Divisions", min_value=1, max_value=20, value=int(u_set.get("max_stocks", 5)))
+    new_max = st.number_input("Max Stocks", min_value=1, max_value=20, value=int(u_set.get("max_stocks", 5)))
     new_wgt = st.slider("Weight (%)", 10.0, 100.0, float(u_set.get("weight_pct", 100.0)), 5.0)
     allocated_per_stock = float(new_cap / new_max) * float(new_wgt / 100)
     
-    st.markdown("<br><div class='metric-title'>Deep Filter</div>", unsafe_allow_html=True)
+    st.markdown("<br><div class='metric-title'>딥 필터 (FILTER)</div>", unsafe_allow_html=True)
     new_k = st.slider("K-Value", 0.3, 0.8, float(u_set.get("fixed_k", 0.5)), 0.05)
     new_sl = st.slider("Stop Loss (%)", 1.0, 10.0, float(u_set.get("stop_loss_pct", 4.0)), 0.5)
     new_rr = st.slider("Target R/R", 1.0, 5.0, float(u_set.get("base_rr_ratio", 2.0)), 0.5)
@@ -234,13 +223,12 @@ with st.sidebar:
         sync_and_save()
 
     st.divider()
-    st.markdown("<div class='metric-title'>Live Operators</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-title'>🟢 LIVE OPERATORS</div>", unsafe_allow_html=True)
     for u in list(active_users.keys()):
-        if u == current_u: st.markdown(f"<span style='color:#10b981; font-weight:bold;'>● {u} (You)</span>", unsafe_allow_html=True)
-        else: st.markdown(f"<span style='color:{muted_text};'>● {u}</span>", unsafe_allow_html=True)
+        st.markdown(f"<span style='color:{'#10b981' if u==current_u else muted_text};'>● {u}</span>", unsafe_allow_html=True)
 
 # ==========================================
-# 5. 매크로 및 엔진 모듈 (스파크라인 데이터 추가)
+# 5. 매크로 및 엔진 모듈
 # ==========================================
 @st.cache_data(ttl=60)
 def get_macro_indices():
@@ -283,7 +271,6 @@ def get_ranking_data(tickers, k, allocated_budget, sl_pct, base_rr):
             is_hit = current >= target
             is_chasing = current > (target * 1.015) 
             
-            # 시그널 변환
             if not is_bull: signal = "❄️ WAIT"
             elif is_chasing: signal = "🚀 OVER"
             elif is_hit: signal = "🎯 BUY"
@@ -293,20 +280,16 @@ def get_ranking_data(tickers, k, allocated_budget, sl_pct, base_rr):
             if is_hit: score += 50
             if signal == "🎯 BUY": score += 20
 
-            # [신규] 스파크라인용 14일 추세 데이터 추출
-            trend_data = df['Close'].tail(14).tolist()
-
             results.append({
                 "Ticker": str(ticker), 
                 "Price": current, "Change": change_pct, 
                 "Signal": signal, "Score": score,
-                "Trend": trend_data, # 스파크라인
                 "Target": target, "TP": take_profit, "SL": stop_loss,
                 "Qty": int(allocated_budget / target) if signal in ["🎯 BUY", "👀 WATCH"] else 0
             })
         except Exception: continue
         
-    df_res = pd.DataFrame(results) if results else pd.DataFrame(columns=["Ticker", "Price", "Change", "Signal", "Score", "Trend", "Target", "TP", "SL", "Qty"])
+    df_res = pd.DataFrame(results) if results else pd.DataFrame(columns=["Ticker", "Price", "Change", "Signal", "Score", "Target", "TP", "SL", "Qty"])
     if not df_res.empty: df_res = df_res.sort_values(by="Score", ascending=False).reset_index(drop=True)
     return df_res
 
@@ -315,68 +298,60 @@ def draw_tactical_chart(ticker, target, tp, sl):
     fig = make_subplots(rows=1, cols=1)
     fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], increasing_line_color='#10b981', decreasing_line_color='#ef4444'))
     fig.add_trace(go.Scatter(x=df.index, y=df['Close'].rolling(5).mean(), line=dict(color='cyan', width=1.5), name='5MA'))
-    
     fig.add_hline(y=tp, line_dash="solid", line_color="#3b82f6", annotation_text=f"TP ${tp:.2f}")
     fig.add_hline(y=target, line_dash="dash", line_color="#10b981", annotation_text=f"ENTRY ${target:.2f}")
     fig.add_hline(y=sl, line_dash="solid", line_color="#ef4444", annotation_text=f"SL ${sl:.2f}")
-    
     fig.update_layout(template="plotly_dark", height=350, margin=dict(l=0,r=40,t=10,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False, xaxis_rangeslider_visible=False)
     return fig
 
-def draw_gauge(pct):
-    color = "#10b981" if pct >= 0 else "#ef4444"
-    fig = go.Figure(go.Indicator(
-        mode = "gauge+number", value = pct, number = {'suffix': "%", 'font':{'color': color, 'size': 40}},
-        gauge = {'axis': {'range': [-15, 15], 'visible': False}, 'bar': {'color': color}, 'bgcolor': "rgba(255,255,255,0.1)"}
-    ))
-    fig.update_layout(height=200, margin=dict(l=20,r=20,t=20,b=20), paper_bgcolor='rgba(0,0,0,0)', font={'color': "#fff"})
-    return fig
-
 # ==========================================
-# 6. 메인 UI 렌더링 (Dashboard Layout)
+# 6. 메인 UI (Mobile First)
 # ==========================================
 indices = get_macro_indices()
 t_str = " &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; ".join([f"<span style='color:#64748b;'>{k}</span> <span style='color:#fff; font-weight:bold;'>{v['price']:.2f}</span> <span style='color:{'#10b981' if v['pct']>=0 else '#ef4444'};'>({'+' if v['pct']>=0 else ''}{v['pct']:.2f}%)</span>" for k, v in indices.items()])
 st.markdown(f"<div class='ticker-wrap'><div class='ticker-move'>{t_str * 5}</div></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["🎯 ACTION CENTER", "💼 MY PORTFOLIO", "🏆 QUANT LEAGUE"])
+tab1, tab2, tab3 = st.tabs(["🎯 관제탑", "💼 포트폴리오", "🏆 리그"])
 
 # --- TAB 1: 관제탑 ---
 with tab1:
-    st.markdown("<div class='metric-title'>LIVE WATCHLIST SCANNER</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-title'>LIVE SCANNER</div>", unsafe_allow_html=True)
     df_all = get_ranking_data(u_favs if u_favs else ["SPY"], new_k, allocated_per_stock, new_sl, new_rr)
     
     if not df_all.empty:
-        # [신규] 스파크라인 및 뱃지 스타일 적용된 DataFrame
-        disp_df = df_all[['Ticker', 'Price', 'Change', 'Trend', 'Signal', 'Target', 'Qty']].copy()
+        # 모바일을 위해 열(Column)을 극단적으로 축소! 가로스크롤 방지.
+        disp_df = df_all[['Ticker', 'Price', 'Change', 'Signal']].copy()
         
         sel = st.dataframe(disp_df, on_select="rerun", selection_mode="single-row", 
                            column_config={
-                               "Price": st.column_config.NumberColumn(format="$%.2f"),
-                               "Change": st.column_config.NumberColumn(format="%.2f%%"),
-                               "Trend": st.column_config.LineChartColumn("14D Trend", y_min=0, y_max=1000), # 스파크라인!
-                               "Target": st.column_config.NumberColumn(format="$%.2f"),
-                           }, use_container_width=True, hide_index=True, height=250)
+                               "Price": st.column_config.NumberColumn("현재가", format="$%.2f"),
+                               "Change": st.column_config.NumberColumn("등락", format="%.2f%%"),
+                               "Signal": st.column_config.TextColumn("상태")
+                           }, use_container_width=True, hide_index=True, height=200)
         
         idx = sel.selection.rows[0] if sel and sel.selection.rows else 0
         row = df_all.iloc[idx]; focus = str(row['Ticker'])
         
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            st.plotly_chart(draw_tactical_chart(focus, row['Target'], row['TP'], row['SL']), use_container_width=True, config={'displayModeBar': False})
-        with c2:
-            st.markdown(f"<div class='metric-card'><div class='metric-title'>SELECTED TARGET</div><div class='metric-value'>{focus}</div><p style='color:#94a3b8; font-size:14px;'>Entry: <b>${row['Target']:.2f}</b><br>Signal: <b>{row['Signal']}</b></p></div>", unsafe_allow_html=True)
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🚀 EXECUTE GAMESBUY", type="primary", use_container_width=True):
-                if int(row['Qty']) > 0 and row['Signal'] in ["🎯 BUY", "👀 WATCH"]:
-                    u_trades.append({"티커":focus, "진입가":float(row['Price']), "수량":int(row['Qty'])})
-                    sync_and_save(); st.success("ORDER EXECUTED.")
-                else: st.error("SIGNAL REJECTED.")
-    else: st.info("Watchlist is empty.")
+        st.divider()
+        # [신규] 종목 선택 시 전개되는 전술 카드 뷰 (표 대신 Metric 활용)
+        st.markdown(f"<h3 style='margin:0; color:#3b82f6;'>🔍 {focus} 전술 데이터</h3>", unsafe_allow_html=True)
+        m1, m2, m3 = st.columns(3)
+        m1.metric("🎯 진입 타점", f"${row['Target']:.2f}")
+        m2.metric("🔵 목표 익절", f"${row['TP']:.2f}")
+        m3.metric("🔴 칼 손절가", f"${row['SL']:.2f}")
+        
+        st.plotly_chart(draw_tactical_chart(focus, row['Target'], row['TP'], row['SL']), use_container_width=True, config={'displayModeBar': False})
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚀 가상 매수 (GAMESBUY)", type="primary", use_container_width=True):
+            if int(row['Qty']) > 0 and row['Signal'] in ["🎯 BUY", "👀 WATCH"]:
+                u_trades.append({"티커":focus, "종목명":focus, "진입가":float(row['Price']), "수량":int(row['Qty'])})
+                sync_and_save(); st.success("체결 완료!")
+            else: st.error("접근 금지 구간입니다.")
+    else: st.info("관심종목을 추가하세요.")
 
 # --- TAB 2: 포트폴리오 ---
 with tab2:
-    c1, c2 = st.columns([1, 2])
     if u_trades:
         pdf = pd.DataFrame(u_trades)
         for t in pdf['티커'].unique():
@@ -387,18 +362,15 @@ with tab2:
         invested = float((pdf['진입가']*pdf['수량']).sum())
         pct = float((pnl/invested)*100) if invested > 0 else 0.0
         
-        with c1:
-            st.markdown("<div class='metric-title' style='text-align:center;'>TOTAL ROI</div>", unsafe_allow_html=True)
-            st.plotly_chart(draw_gauge(pct), use_container_width=True, config={'displayModeBar': False})
-            st.markdown(f"<h3 style='text-align:center; color:{'#10b981' if pnl>=0 else '#ef4444'};'>${pnl:,.2f}</h3>", unsafe_allow_html=True)
-            if st.button("RESET PORTFOLIO", use_container_width=True): u_trades.clear(); sync_and_save(); st.rerun()
-            
-        with c2:
-            st.markdown("<div class='metric-title'>OPEN POSITIONS</div>", unsafe_allow_html=True)
-            st.dataframe(pdf[['티커', '진입가', '현재', '수량', 'Profit']], column_config={"진입가": st.column_config.NumberColumn(format="$%.2f"), "현재": st.column_config.NumberColumn(format="$%.2f"), "Profit": st.column_config.NumberColumn(format="$%.2f")}, use_container_width=True, hide_index=True)
-    else: st.info("No active positions.")
+        # 총 수익을 카드로 크게 표시
+        st.markdown(f"<div class='metric-card'><div class='metric-title'>TOTAL PNL</div><div class='metric-value' style='color:{'#10b981' if pnl>=0 else '#ef4444'};'>${pnl:,.2f}</div><div class='metric-sub' style='color:{'#10b981' if pct>=0 else '#ef4444'};'>{pct:.2f}% ROI</div></div>", unsafe_allow_html=True)
+        
+        # 개별 종목 표도 심플하게
+        st.dataframe(pdf[['티커', '진입가', '현재', '수량', 'Profit']], column_config={"진입가": st.column_config.NumberColumn(format="$%.2f"), "현재": st.column_config.NumberColumn(format="$%.2f"), "Profit": st.column_config.NumberColumn("수익", format="$%.2f")}, use_container_width=True, hide_index=True)
+        if st.button("전체 리셋", use_container_width=True): u_trades.clear(); sync_and_save(); st.rerun()
+    else: st.info("보유 종목 없음.")
 
-# --- TAB 3: 명예의 전당 ---
+# --- TAB 3: 리그 ---
 with tab3:
     st.markdown("<div class='metric-title'>GLOBAL LEADERBOARD</div>", unsafe_allow_html=True)
     all_users = st.session_state.full_db.get("users", {})
@@ -413,15 +385,15 @@ with tab3:
                 u_pnl += (cp - float(trd["진입가"])) * int(trd["수량"]); u_inv += float(trd["진입가"]) * int(trd["수량"])
             except: pass
         u_pct = float((u_pnl / u_inv) * 100) if u_inv > 0 else 0.0
-        l_data.append({"Trader": str(uname), "ROI": u_pct})
+        l_data.append({"Trader": str(uname), "Profit": u_pnl, "ROI": u_pct})
 
     if l_data:
         ldf = pd.DataFrame(l_data).sort_values(by="ROI", ascending=False)
         colors = ['#3b82f6' if r > 0 else '#ef4444' for r in ldf['ROI']]
         fig = go.Figure(data=[go.Bar(x=ldf['Trader'], y=ldf['ROI'], marker_color=colors, text=[f"{r:.1f}%" for r in ldf['ROI']], textposition='auto')])
-        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0,r=0,t=30,b=0))
+        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0,r=0,t=30,b=0))
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-    else: st.info("No data available.")
+    else: st.info("랭킹 기록 없음.")
 
 st.button("refresh", key="auto_refresh", help="hidden_refresh")
 st.markdown("""<style>div[data-testid="stButton"]:has(button[title="hidden_refresh"]) { display: none !important; }</style>""", unsafe_allow_html=True)
