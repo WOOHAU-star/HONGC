@@ -30,7 +30,7 @@ def cleanup_active_users():
             del active_users[u]
 
 # ==========================================
-# 1. 영구 저장소 (Cloud JSONBin) - 모의투자 완전 제거
+# 1. 영구 저장소 (Cloud JSONBin)
 # ==========================================
 DB_FILE = "apex_database.json"
 
@@ -89,7 +89,7 @@ def save_db(full_db):
 # ==========================================
 # 2. 테마 및 페이지 세팅 (초경량 다크 UI)
 # ==========================================
-st.set_page_config(page_title="APEX QUANT SCANNER", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="APEX QUANT", layout="wide", page_icon="🚀")
 
 if 'full_db' not in st.session_state: st.session_state.full_db = load_db()
 
@@ -108,7 +108,6 @@ st.markdown(f"""
     .metric-card {{ background: {card_bg}; border: 1px solid {border_color}; border-radius: 12px; padding: 15px; text-align: center; margin-bottom: 10px; }}
     .metric-title {{ font-size: 12px; color: {muted_text}; font-weight: 700; margin-bottom: 5px; text-transform: uppercase; }}
     
-    /* 타점 도달 네온사인 */
     @keyframes neon {{
         0% {{ box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); border-color: #ef4444; }}
         100% {{ box-shadow: 0 0 15px rgba(239, 68, 68, 0.8); border-color: #fca5a5; }}
@@ -119,7 +118,6 @@ st.markdown(f"""
     div[data-baseweb="input"] > div {{ border-radius: 8px; background-color: {card_bg}; border-color: {border_color}; }}
     div[data-baseweb="select"] > div {{ border-radius: 8px; background-color: {card_bg}; border-color: {border_color}; }}
     
-    /* 미니멀 헤더 티커 */
     .ticker-wrap {{ width: 100%; overflow: hidden; background: #070a12; padding: 4px 0; border-bottom: 1px solid {border_color}; margin-bottom: 10px; }}
     .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 120s linear infinite; font-size: 12px; font-weight: 700; }}
     @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-150%); }} }}
@@ -127,7 +125,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 (자동 세션 락)
+# 3. 로그인 (여백 최소화)
 # ==========================================
 url_params = st.query_params
 url_u = url_params.get('u')
@@ -145,12 +143,11 @@ if url_u and url_sid and 'current_user' not in st.session_state:
         st.session_state.current_user = url_u; st.session_state.session_id = url_sid
 
 if 'current_user' not in st.session_state:
-    st.markdown("<br><br><br><h1 style='text-align:center; font-weight:900; font-size:32px; letter-spacing:1px;'>APEX <span style='color:#667eea;'>SCANNER</span></h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center; color:{muted_text}; font-size:14px;'>실전 전술 스캐너 접속</p><br>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center; font-weight:900; font-size:32px; letter-spacing:1px; margin-top:20px;'>APEX <span style='color:#667eea;'>SCANNER</span></h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align:center; color:{muted_text}; font-size:14px;'>실전 전술 스캐너 접속</p>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="Callsign 입력", label_visibility="collapsed")
-        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("CONNECT 🚀", type="primary", use_container_width=True):
             if 1 <= len(login_name) <= 8:
                 rec = active_users.get(login_name)
@@ -237,7 +234,7 @@ with st.sidebar:
         st.markdown(f"<span style='color:{'#10b981' if u==current_u else muted_text}; font-size:12px;'>● {u}</span>", unsafe_allow_html=True)
 
 # ==========================================
-# 6. 스캔 엔진 및 완벽 방어 차트
+# 6. 스캔 엔진 및 1980 버그 해결 차트
 # ==========================================
 @st.cache_data(ttl=60)
 def get_macro_indices():
@@ -301,19 +298,21 @@ def get_ranking_data(tickers, k, sl_pct, base_rr):
     return df_res
 
 def draw_tactical_chart(ticker, target, tp, sl):
-    # [방어막] 차트가 어떤 이유로든 뻗지 않도록 완벽히 감쌉니다.
     try:
         df = yf.Ticker(ticker).history(period="1mo")
         if df.empty or len(df) < 5:
             return go.Figure().update_layout(template="plotly_dark", title="Data Not Available")
 
+        # [버그 수술] 날짜 데이터를 순수 문자열로 변환하여 1970년 에포크 타임 버그 & 주말 공백 방지
+        df.index = df.index.strftime('%m-%d')
+
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.75, 0.25])
         
-        # 1. 캔들 & 이평선
-        fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], increasing_line_color='#667eea', decreasing_line_color='#ef4444', showlegend=False), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['Close'].rolling(5).mean(), line=dict(color='#764ba2', width=1.5), name='5MA', showlegend=False), row=1, col=1)
+        # 1. 한국형 캔들 (상승:빨강 / 하락:파랑) & 이평선
+        fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], increasing_line_color='#ef4444', decreasing_line_color='#3b82f6', showlegend=False), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['Close'].rolling(5).mean(), line=dict(color='#eab308', width=1.5), name='5MA', showlegend=False), row=1, col=1)
         
-        # 2. 매물대 (에러 방어)
+        # 2. 매물대 (오류 방어)
         try:
             bins = np.linspace(df['Low'].min(), df['High'].max(), 24) 
             hist, bin_edges = np.histogram(df['Close'], bins=bins, weights=df['Volume'])
@@ -323,8 +322,8 @@ def draw_tactical_chart(ticker, target, tp, sl):
         except Exception:
             max_hist = 1
         
-        # 3. 거래량
-        v_colors = ['#667eea' if row['Close'] >= row['Open'] else '#ef4444' for _, row in df.iterrows()]
+        # 3. 한국형 거래량
+        v_colors = ['#ef4444' if row['Close'] >= row['Open'] else '#3b82f6' for _, row in df.iterrows()]
         fig.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color=v_colors, showlegend=False), row=2, col=1)
         
         # 4. 타점선
@@ -332,9 +331,9 @@ def draw_tactical_chart(ticker, target, tp, sl):
         fig.add_hline(y=target, line_dash="dash", line_color="#10b981", annotation_text=f"ENTRY {target:.2f}", row=1, col=1)
         fig.add_hline(y=sl, line_dash="solid", line_color="#ef4444", annotation_text=f"SL {sl:.2f}", row=1, col=1)
         
-        # 5. [줌-잠금] 터치 조작 원천 봉쇄
-        fig.update_xaxes(rangeslider_visible=False, fixedrange=True, row=1, col=1)
-        fig.update_xaxes(rangeslider_visible=False, fixedrange=True, row=2, col=1)
+        # 5. [줌 잠금 & X축 문자열(Category) 고정]
+        fig.update_xaxes(type='category', rangeslider_visible=False, fixedrange=True, row=1, col=1)
+        fig.update_xaxes(type='category', rangeslider_visible=False, fixedrange=True, row=2, col=1)
         fig.update_yaxes(fixedrange=True, row=1, col=1)
         fig.update_yaxes(fixedrange=True, row=2, col=1)
         
@@ -345,14 +344,13 @@ def draw_tactical_chart(ticker, target, tp, sl):
         )
         return fig
     except Exception as e:
-        # 최후의 방어선: 완전히 뻗었을 때 빈 차트 반환
         return go.Figure().update_layout(template="plotly_dark", title="Rendering Error", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
 # ==========================================
 # 7. 메인 UI (초경량 스캐너 뷰)
 # ==========================================
 indices = get_macro_indices()
-t_str = " &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; ".join([f"<span style='color:{muted_text};'>{k}</span> <span style='color:#fff; font-weight:bold;'>{v['price']:.2f}</span> <span style='color:{'#10b981' if v['pct']>=0 else '#ef4444'};'>({'+' if v['pct']>=0 else ''}{v['pct']:.2f}%)</span>" for k, v in indices.items()])
+t_str = " &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; ".join([f"<span style='color:{muted_text};'>{k}</span> <span style='color:#fff; font-weight:bold;'>{v['price']:.2f}</span> <span style='color:{'#ef4444' if v['pct']>=0 else '#3b82f6'};'>({'+' if v['pct']>=0 else ''}{v['pct']:.2f}%)</span>" for k, v in indices.items()])
 st.markdown(f"<div class='ticker-wrap'><div class='ticker-move'>{t_str * 5}</div></div>", unsafe_allow_html=True)
 
 selected_sector = st.selectbox("📂 섹터 선택 (스캔)", ["⭐ 내 관심종목 스캔"] + list(SECTORS.keys()), label_visibility="collapsed")
@@ -366,7 +364,7 @@ else:
         df_all = get_ranking_data(scan_list, new_k, new_sl, new_rr)
     
     if not df_all.empty:
-        # 네온사인 경고
+        # 네온사인 경고 (타점 도달)
         hits = df_all[df_all['Signal'] == '🎯 BUY']['Ticker'].tolist()
         if hits:
             hit_str = ", ".join(hits)
@@ -374,6 +372,7 @@ else:
 
         disp_df = df_all[['Ticker', 'Price', 'Change', 'Signal']].copy()
         
+        # [참고] 스트림릿 시스템상, 종목 선택(on_select) 기능을 쓰기 위해 맨 좌측 체크박스는 필수 고정됩니다.
         sel = st.dataframe(disp_df, on_select="rerun", selection_mode="single-row", 
                            column_config={
                                "Price": st.column_config.NumberColumn("현재가", format="$%.2f"),
@@ -384,10 +383,9 @@ else:
         idx = sel.selection.rows[0] if sel and sel.selection.rows else 0
         row = df_all.iloc[idx]; focus = str(row['Ticker'])
         
-        st.divider()
-        # [UI 개편] 한 줄짜리 초압축 인라인 정보창
+        # 인라인 정보창
         st.markdown(f"""
-        <div style="display:flex; justify-content:space-around; align-items:center; background:{card_bg}; padding:10px; border-radius:8px; border:1px solid {border_color}; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-around; align-items:center; background:{card_bg}; padding:10px; border-radius:8px; border:1px solid {border_color}; margin-top:10px; margin-bottom:10px;">
             <span style="font-size:18px; font-weight:900; color:#667eea;">{focus}</span>
             <span style="font-size:14px;"><span style="color:{muted_text};">ENTRY</span> <b style="color:#10b981;">${row['Target']:.2f}</b></span>
             <span style="font-size:14px;"><span style="color:{muted_text};">TP</span> <b style="color:#3b82f6;">${row['TP']:.2f}</b></span>
@@ -395,11 +393,16 @@ else:
         </div>
         """, unsafe_allow_html=True)
         
-        # 차트 출력
+        # 무결점 차트 출력
         st.plotly_chart(draw_tactical_chart(focus, row['Target'], row['TP'], row['SL']), use_container_width=True, config={'displayModeBar': False})
         
     else: st.info("스캔 결과가 없거나 통신 지연입니다.")
 
-st.button("refresh", key="auto_refresh", help="hidden_refresh")
-st.markdown("""<style>div[data-testid="stButton"]:has(button[title="hidden_refresh"]) { display: none !important; }</style>""", unsafe_allow_html=True)
-components.html("""<script>let t = 60; setInterval(() => { t--; if(t<=0) { t=60; const btn = window.parent.document.querySelector('button[title="hidden_refresh"]'); if(btn) btn.click(); } }, 1000);</script>""", height=0)
+# [버그 수술] 지저분한 버튼 꼼수 대신, 순수 자바스크립트로 화면 자체를 깨끗하게 새로고침 (URL 파라미터 유지)
+components.html("""
+    <script>
+        setTimeout(function() {
+            window.parent.location.reload();
+        }, 60000);
+    </script>
+""", height=0)
