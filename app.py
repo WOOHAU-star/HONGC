@@ -87,17 +87,18 @@ def save_db(full_db):
         json.dump(full_db, f, ensure_ascii=False, indent=4)
 
 # ==========================================
-# 2. 테마 및 페이지 세팅
+# 2. 테마 및 페이지 세팅 (하이엔드 핀테크 UI)
 # ==========================================
 st.set_page_config(page_title="APEX QUANT", layout="wide", page_icon="🚀")
 
 if 'full_db' not in st.session_state: st.session_state.full_db = load_db()
 
-bg_color = "#0b101e" 
-text_color = "#e2e8f0"
-card_bg = "#151b2b"
-border_color = "#1e293b"
-muted_text = "#64748b"
+# 레퍼런스 이미지 기반 색상 추출
+bg_color = "#0d1321" 
+text_color = "#f1f5f9"
+card_bg = "#172033"
+border_color = "#232e4a"
+muted_text = "#8193b2"
 
 st.markdown(f"""
     <style>
@@ -105,17 +106,25 @@ st.markdown(f"""
     html, body, [class*="css"]  {{ font-family: 'Pretendard', sans-serif !important; background-color: {bg_color}; color: {text_color}; }}
     .stApp {{ background-color: {bg_color}; }}
     
-    /* UI 개편 스타일 */
-    .metric-card {{ background: {card_bg}; border: 1px solid {border_color}; border-radius: 12px; padding: 15px; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 10px; }}
-    .metric-title {{ font-size: 12px; color: {muted_text}; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }}
-    .metric-value {{ font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 5px; }}
-    .metric-sub {{ font-size: 14px; font-weight: 600; }}
+    /* 레퍼런스 스타일 카드 */
+    .metric-card {{ background: {card_bg}; border: 1px solid {border_color}; border-radius: 16px; padding: 20px; text-align: center; box-shadow: 0 10px 20px -5px rgba(0,0,0,0.3); margin-bottom: 15px; }}
+    .metric-title {{ font-size: 13px; color: {muted_text}; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; margin-bottom: 8px; }}
+    .metric-value {{ font-size: 26px; font-weight: 900; color: #fff; margin-bottom: 5px; }}
     
-    /* 텍스트 인풋 & 버튼 */
-    div[data-testid="stButton"] button[kind="primary"] {{ background: linear-gradient(90deg, #2563eb, #3b82f6); color: white; font-weight: 900; border: none; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }}
+    /* 레퍼런스 스타일 네온/그레이디언트 버튼 */
+    div[data-testid="stButton"] button[kind="primary"] {{ 
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+        color: white; font-weight: 900; border: none; border-radius: 25px; 
+        box-shadow: 0 4px 15px rgba(118, 75, 162, 0.4); padding: 10px 0; transition: all 0.3s;
+    }}
+    div[data-testid="stButton"] button[kind="primary"]:hover {{ transform: translateY(-2px); box-shadow: 0 6px 20px rgba(118, 75, 162, 0.6); }}
+    
+    /* 입력창 모서리 둥글게 */
+    div[data-baseweb="input"] > div {{ border-radius: 15px; background-color: {card_bg}; border-color: {border_color}; }}
+    div[data-baseweb="select"] > div {{ border-radius: 15px; background-color: {card_bg}; border-color: {border_color}; }}
     
     /* Ticker Tape */
-    .ticker-wrap {{ width: 100%; overflow: hidden; background: #000; padding: 6px 0; border-bottom: 1px solid {border_color}; margin-bottom: 15px; }}
+    .ticker-wrap {{ width: 100%; overflow: hidden; background: #070a12; padding: 8px 0; border-bottom: 1px solid {border_color}; margin-bottom: 20px; }}
     .ticker-move {{ display: inline-block; white-space: nowrap; animation: ticker 120s linear infinite; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; }}
     @keyframes ticker {{ 0% {{ transform: translateX(100%); }} 100% {{ transform: translateX(-150%); }} }}
     </style>
@@ -140,13 +149,15 @@ if url_u and url_sid and 'current_user' not in st.session_state:
         st.session_state.current_user = url_u; st.session_state.session_id = url_sid
 
 if 'current_user' not in st.session_state:
-    st.markdown("<br><br><br><h1 style='text-align:center; font-weight:900; letter-spacing:1px;'>APEX <span style='color:#3b82f6;'>QUANT</span></h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center; color:{muted_text};'>TACTICAL RADAR ON</p><br>", unsafe_allow_html=True)
+    # 이미지 레퍼런스를 반영한 둥글고 세련된 로그인 UI
+    st.markdown("<br><br><br><h1 style='text-align:center; font-weight:900; font-size:40px; letter-spacing:2px;'>APEX</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align:center; color:{muted_text};'>Create your tactical account</p><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="닉네임 입력", label_visibility="collapsed")
+        st.markdown(f"<div style='font-size:13px; color:{muted_text}; margin-bottom:5px; margin-left:10px;'>Your Callsign</div>", unsafe_allow_html=True)
+        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="Monic Fox", label_visibility="collapsed")
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("SYSTEM INITIALIZE 🚀", type="primary", use_container_width=True):
+        if st.button("GET STARTED", type="primary", use_container_width=True):
             if 1 <= len(login_name) <= 8:
                 rec = active_users.get(login_name)
                 if rec and (current_time - rec['last_seen'] < TIMEOUT_SECONDS):
@@ -176,11 +187,27 @@ def sync_and_save():
     save_db(st.session_state.full_db)
 
 # ==========================================
-# 4. 사이드바
+# 4. 10개 테마 200개 종목 데이터베이스 복구
+# ==========================================
+SECTORS = {
+    "🌟 Big Tech (빅테크)": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA", "NFLX", "ADBE", "CRM", "ORCL", "CSCO", "IBM", "INTC", "QCOM", "TXN", "AVGO", "AMAT", "MU", "AMD"],
+    "💻 AI & 반도체": ["TSM", "ASML", "ARM", "SMCI", "KLAC", "SNPS", "CDNS", "NXPI", "MCHP", "LRCX", "MRVL", "MPWR", "ON", "SWKS", "TER", "WDC", "STM", "GFS", "ENTG", "QRVO"],
+    "⚡ 전기차 & 자율주행": ["RIVN", "LCID", "F", "GM", "NIO", "XPEV", "LI", "ALB", "PLUG", "ENPH", "MBLY", "LAZR", "QS", "CHPT", "RUN", "BLDP", "FSR", "NKLA", "PTRA", "ARVL"],
+    "🧬 바이오 & 헬스케어": ["LLY", "UNH", "JNJ", "MRK", "ABBV", "PFE", "AMGN", "GILD", "BMY", "CVS", "TMO", "MDT", "DHR", "ABT", "ISRG", "SYK", "VRTX", "ZTS", "REGN", "BSX"],
+    "🏦 금융 & 핀테크": ["JPM", "BAC", "V", "MA", "PYPL", "SQ", "HOOD", "COIN", "GS", "MS", "WFC", "C", "AXP", "BLK", "SCHW", "MCO", "SPGI", "CME", "ICE", "CB"],
+    "🛡️ 사이버 보안": ["CRWD", "PANW", "FTNT", "NOW", "SNOW", "PLTR", "DDOG", "NET", "ZS", "OKTA", "CHKP", "CYBR", "TENB", "VRNS", "QLYS", "RPD", "S", "MNDT", "FEYE", "NLOK"],
+    "☁️ 클라우드 & SW": ["SHOP", "UBER", "MNDY", "TEAM", "NET", "DOCN", "CFLT", "MDB", "PATH", "ESTC", "DT", "HCP", "FIVN", "SMAR", "AYX", "BOX", "PD", "ZEN", "DBX", "WK"],
+    "🚀 우주항공 & 방산": ["LMT", "RTX", "NOC", "GD", "BA", "TDG", "HEI", "HII", "TXT", "LHX", "KTOS", "CUB", "KAMN", "AJRD", "AVAV", "MOG-A", "ATRO", "SPCE", "RKLB", "ASTS"],
+    "🛒 이커머스 & 소비재": ["WMT", "HD", "PG", "COST", "TGT", "KO", "PEP", "MCD", "NKE", "SBUX", "MELI", "SE", "CPNG", "EBAY", "ETSY", "WAY", "CHWY", "PINS", "FTCH", "W"],
+    "⚡ 에너지 & 친환경": ["XOM", "CVX", "CVX", "SHEL", "COP", "TTE", "BP", "EQNR", "OXY", "EOG", "FSLR", "SEDG", "DQ", "SPWR", "NEP", "BEP", "CWEN", "HASI", "AY", "PEGI"]
+}
+
+# ==========================================
+# 5. 사이드바 통제
 # ==========================================
 with st.sidebar:
-    st.markdown(f"<div class='metric-card'><h3 style='margin:0; color:#fff;'>🕵️ {current_u}</h3><p style='margin:0; font-size:12px; color:#10b981;'>● SECURE CONNECTION</p></div>", unsafe_allow_html=True)
-    if st.button("로그아웃 (DISCONNECT)", use_container_width=True):
+    st.markdown(f"<div class='metric-card'><h3 style='margin:0; color:#fff;'>👤 {current_u}</h3><p style='margin:0; font-size:12px; color:#667eea;'>SECURE CONNECTION</p></div>", unsafe_allow_html=True)
+    if st.button("LOGOUT", use_container_width=True):
         if current_u in active_users: del active_users[current_u]
         del st.session_state.current_user; del st.session_state.session_id; st.query_params.clear(); st.rerun()
     
@@ -196,14 +223,9 @@ with st.sidebar:
                         u_favs.append(str(new_search)); sync_and_save(); st.rerun()
                 except Exception: pass
     
-    SECTORS = {
-        "🌟 Big Tech": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA"],
-        "💻 AI/Semi": ["AMD", "TSM", "ASML", "ARM", "SMCI"],
-        "⚡ EV/Energy": ["RIVN", "LCID", "NIO"]
-    }
-    all_tickers = list(set([t for v in SECTORS.values() for t in v] + u_favs))
+    all_tickers_flat = list(set([t for v in SECTORS.values() for t in v] + u_favs))
     st.markdown("<br><div class='metric-title'>관심종목 관리 (REMOVE)</div>", unsafe_allow_html=True)
-    new_favs = st.multiselect("Edit Watchlist", options=all_tickers, default=u_favs, label_visibility="collapsed")
+    new_favs = st.multiselect("Edit Watchlist", options=all_tickers_flat, default=u_favs, label_visibility="collapsed")
     if new_favs != u_favs: u_data["favorites"] = new_favs; u_favs = new_favs; sync_and_save()
         
     st.divider()
@@ -222,13 +244,8 @@ with st.sidebar:
         u_set.update({"total_capital": new_cap, "max_stocks": new_max, "weight_pct": new_wgt, "fixed_k": new_k, "stop_loss_pct": new_sl, "base_rr_ratio": new_rr})
         sync_and_save()
 
-    st.divider()
-    st.markdown("<div class='metric-title'>🟢 LIVE OPERATORS</div>", unsafe_allow_html=True)
-    for u in list(active_users.keys()):
-        st.markdown(f"<span style='color:{'#10b981' if u==current_u else muted_text};'>● {u}</span>", unsafe_allow_html=True)
-
 # ==========================================
-# 5. 매크로 및 엔진 모듈
+# 6. 매크로 및 엔진 모듈
 # ==========================================
 @st.cache_data(ttl=60)
 def get_macro_indices():
@@ -296,61 +313,64 @@ def get_ranking_data(tickers, k, allocated_budget, sl_pct, base_rr):
 def draw_tactical_chart(ticker, target, tp, sl):
     df = yf.Ticker(ticker).history(period="1mo")
     fig = make_subplots(rows=1, cols=1)
-    fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], increasing_line_color='#10b981', decreasing_line_color='#ef4444'))
-    fig.add_trace(go.Scatter(x=df.index, y=df['Close'].rolling(5).mean(), line=dict(color='cyan', width=1.5), name='5MA'))
+    fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], increasing_line_color='#667eea', decreasing_line_color='#ef4444'))
+    fig.add_trace(go.Scatter(x=df.index, y=df['Close'].rolling(5).mean(), line=dict(color='#764ba2', width=1.5), name='5MA'))
     fig.add_hline(y=tp, line_dash="solid", line_color="#3b82f6", annotation_text=f"TP ${tp:.2f}")
-    fig.add_hline(y=target, line_dash="dash", line_color="#10b981", annotation_text=f"ENTRY ${target:.2f}")
+    fig.add_hline(y=target, line_dash="dash", line_color="#667eea", annotation_text=f"ENTRY ${target:.2f}")
     fig.add_hline(y=sl, line_dash="solid", line_color="#ef4444", annotation_text=f"SL ${sl:.2f}")
-    fig.update_layout(template="plotly_dark", height=350, margin=dict(l=0,r=40,t=10,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False, xaxis_rangeslider_visible=False)
+    fig.update_layout(template="plotly_dark", height=300, margin=dict(l=0,r=40,t=10,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False, xaxis_rangeslider_visible=False)
     return fig
 
 # ==========================================
-# 6. 메인 UI (Mobile First)
+# 7. 메인 UI (모바일 공간 확보 및 레퍼런스 적용)
 # ==========================================
 indices = get_macro_indices()
-t_str = " &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; ".join([f"<span style='color:#64748b;'>{k}</span> <span style='color:#fff; font-weight:bold;'>{v['price']:.2f}</span> <span style='color:{'#10b981' if v['pct']>=0 else '#ef4444'};'>({'+' if v['pct']>=0 else ''}{v['pct']:.2f}%)</span>" for k, v in indices.items()])
+t_str = " &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp; ".join([f"<span style='color:{muted_text};'>{k}</span> <span style='color:#fff; font-weight:bold;'>{v['price']:.2f}</span> <span style='color:{'#667eea' if v['pct']>=0 else '#ef4444'};'>({'+' if v['pct']>=0 else ''}{v['pct']:.2f}%)</span>" for k, v in indices.items()])
 st.markdown(f"<div class='ticker-wrap'><div class='ticker-move'>{t_str * 5}</div></div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["🎯 관제탑", "💼 포트폴리오", "🏆 리그"])
+tab1, tab2, tab3 = st.tabs(["🎯 SCANNER", "💼 WALLET", "🏆 RANKING"])
 
-# --- TAB 1: 관제탑 ---
+# --- TAB 1: SCANNER ---
 with tab1:
-    st.markdown("<div class='metric-title'>LIVE SCANNER</div>", unsafe_allow_html=True)
-    df_all = get_ranking_data(u_favs if u_favs else ["SPY"], new_k, allocated_per_stock, new_sl, new_rr)
+    # [모바일 공간 확보] 방대한 10개 테마를 콤팩트한 드롭다운으로 변경
+    selected_sector = st.selectbox("📂 Select Sector (200 Tickers)", list(SECTORS.keys()))
     
-    if not df_all.empty:
-        # 모바일을 위해 열(Column)을 극단적으로 축소! 가로스크롤 방지.
-        disp_df = df_all[['Ticker', 'Price', 'Change', 'Signal']].copy()
+    if selected_sector:
+        with st.spinner("Scanning 20 targets..."):
+            df_all = get_ranking_data(SECTORS[selected_sector], new_k, allocated_per_stock, new_sl, new_rr)
         
-        sel = st.dataframe(disp_df, on_select="rerun", selection_mode="single-row", 
-                           column_config={
-                               "Price": st.column_config.NumberColumn("현재가", format="$%.2f"),
-                               "Change": st.column_config.NumberColumn("등락", format="%.2f%%"),
-                               "Signal": st.column_config.TextColumn("상태")
-                           }, use_container_width=True, hide_index=True, height=200)
-        
-        idx = sel.selection.rows[0] if sel and sel.selection.rows else 0
-        row = df_all.iloc[idx]; focus = str(row['Ticker'])
-        
-        st.divider()
-        # [신규] 종목 선택 시 전개되는 전술 카드 뷰 (표 대신 Metric 활용)
-        st.markdown(f"<h3 style='margin:0; color:#3b82f6;'>🔍 {focus} 전술 데이터</h3>", unsafe_allow_html=True)
-        m1, m2, m3 = st.columns(3)
-        m1.metric("🎯 진입 타점", f"${row['Target']:.2f}")
-        m2.metric("🔵 목표 익절", f"${row['TP']:.2f}")
-        m3.metric("🔴 칼 손절가", f"${row['SL']:.2f}")
-        
-        st.plotly_chart(draw_tactical_chart(focus, row['Target'], row['TP'], row['SL']), use_container_width=True, config={'displayModeBar': False})
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚀 가상 매수 (GAMESBUY)", type="primary", use_container_width=True):
-            if int(row['Qty']) > 0 and row['Signal'] in ["🎯 BUY", "👀 WATCH"]:
-                u_trades.append({"티커":focus, "종목명":focus, "진입가":float(row['Price']), "수량":int(row['Qty'])})
-                sync_and_save(); st.success("체결 완료!")
-            else: st.error("접근 금지 구간입니다.")
-    else: st.info("관심종목을 추가하세요.")
+        if not df_all.empty:
+            disp_df = df_all[['Ticker', 'Price', 'Change', 'Signal']].copy()
+            sel = st.dataframe(disp_df, on_select="rerun", selection_mode="single-row", 
+                               column_config={
+                                   "Price": st.column_config.NumberColumn("현재가", format="$%.2f"),
+                                   "Change": st.column_config.NumberColumn("등락", format="%.2f%%"),
+                                   "Signal": st.column_config.TextColumn("상태")
+                               }, use_container_width=True, hide_index=True, height=200)
+            
+            idx = sel.selection.rows[0] if sel and sel.selection.rows else 0
+            row = df_all.iloc[idx]; focus = str(row['Ticker'])
+            
+            st.divider()
+            # 선택 종목 전술 뷰
+            st.markdown(f"<div class='metric-card' style='text-align:left;'><div class='metric-title'>Selected Asset</div><div class='metric-value' style='color:#667eea;'>{focus}</div></div>", unsafe_allow_html=True)
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("🎯 ENTRY", f"${row['Target']:.2f}")
+            m2.metric("🔵 TP", f"${row['TP']:.2f}")
+            m3.metric("🔴 SL", f"${row['SL']:.2f}")
+            
+            st.plotly_chart(draw_tactical_chart(focus, row['Target'], row['TP'], row['SL']), use_container_width=True, config={'displayModeBar': False})
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("CONFIRM GAMESBUY", type="primary", use_container_width=True):
+                if int(row['Qty']) > 0 and row['Signal'] in ["🎯 BUY", "👀 WATCH"]:
+                    u_trades.append({"티커":focus, "종목명":focus, "진입가":float(row['Price']), "수량":int(row['Qty'])})
+                    sync_and_save(); st.success("Transaction Confirmed!")
+                else: st.error("Invalid Entry conditions.")
+        else: st.info("데이터 통신 지연. 다시 선택해주세요.")
 
-# --- TAB 2: 포트폴리오 ---
+# --- TAB 2: WALLET ---
 with tab2:
     if u_trades:
         pdf = pd.DataFrame(u_trades)
@@ -362,17 +382,14 @@ with tab2:
         invested = float((pdf['진입가']*pdf['수량']).sum())
         pct = float((pnl/invested)*100) if invested > 0 else 0.0
         
-        # 총 수익을 카드로 크게 표시
-        st.markdown(f"<div class='metric-card'><div class='metric-title'>TOTAL PNL</div><div class='metric-value' style='color:{'#10b981' if pnl>=0 else '#ef4444'};'>${pnl:,.2f}</div><div class='metric-sub' style='color:{'#10b981' if pct>=0 else '#ef4444'};'>{pct:.2f}% ROI</div></div>", unsafe_allow_html=True)
-        
-        # 개별 종목 표도 심플하게
+        st.markdown(f"<div class='metric-card'><div class='metric-title'>Available Balance</div><div class='metric-value'>${pnl:,.2f}</div><div class='metric-sub' style='color:{'#667eea' if pct>=0 else '#ef4444'};'>{pct:.2f}% ROI</div></div>", unsafe_allow_html=True)
         st.dataframe(pdf[['티커', '진입가', '현재', '수량', 'Profit']], column_config={"진입가": st.column_config.NumberColumn(format="$%.2f"), "현재": st.column_config.NumberColumn(format="$%.2f"), "Profit": st.column_config.NumberColumn("수익", format="$%.2f")}, use_container_width=True, hide_index=True)
-        if st.button("전체 리셋", use_container_width=True): u_trades.clear(); sync_and_save(); st.rerun()
-    else: st.info("보유 종목 없음.")
+        if st.button("RESET WALLET", use_container_width=True): u_trades.clear(); sync_and_save(); st.rerun()
+    else: st.info("No Active Assets.")
 
-# --- TAB 3: 리그 ---
+# --- TAB 3: RANKING ---
 with tab3:
-    st.markdown("<div class='metric-title'>GLOBAL LEADERBOARD</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-title'>SPENDINGS CATEGORIES</div>", unsafe_allow_html=True)
     all_users = st.session_state.full_db.get("users", {})
     l_data = []
     for uname, udata in all_users.items():
@@ -389,11 +406,11 @@ with tab3:
 
     if l_data:
         ldf = pd.DataFrame(l_data).sort_values(by="ROI", ascending=False)
-        colors = ['#3b82f6' if r > 0 else '#ef4444' for r in ldf['ROI']]
+        colors = ['#667eea' if r > 0 else '#ef4444' for r in ldf['ROI']]
         fig = go.Figure(data=[go.Bar(x=ldf['Trader'], y=ldf['ROI'], marker_color=colors, text=[f"{r:.1f}%" for r in ldf['ROI']], textposition='auto')])
         fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0,r=0,t=30,b=0))
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-    else: st.info("랭킹 기록 없음.")
+    else: st.info("No Ranking Data.")
 
 st.button("refresh", key="auto_refresh", help="hidden_refresh")
 st.markdown("""<style>div[data-testid="stButton"]:has(button[title="hidden_refresh"]) { display: none !important; }</style>""", unsafe_allow_html=True)
