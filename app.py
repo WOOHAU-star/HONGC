@@ -18,11 +18,10 @@ import time
 # ==========================================
 @st.cache_resource
 def get_active_users():
-    # 구조: {"닉네임": {"sid": "랜덤세션ID", "last_seen": 타임스탬프}}
     return {}
 
 active_users = get_active_users()
-TIMEOUT_SECONDS = 90  # 90초 이상 생존신고(새로고침) 없으면 로그아웃 간주
+TIMEOUT_SECONDS = 90
 
 # ==========================================
 # 1. 영구 저장소 (Cloud JSONBin)
@@ -54,7 +53,6 @@ def load_db():
                 db_data = json.load(f)
         except: pass
 
-    # [마이그레이션] 구형 데이터를 신형(유저별 파티션)으로 변환
     if "users" not in db_data:
         old_data = db_data.copy()
         db_data = {"users": {"Admin": {"favorites": old_data.get("favorites", []), "paper_trades": old_data.get("paper_trades", []), "settings": old_data.get("settings", {"total_capital": 100000, "max_stocks": 5, "weight_pct": 100.0, "fixed_k": 0.5, "stop_loss_pct": 4.0, "base_rr_ratio": 2.0, "gap_limit_pct": 2.0})}}}
@@ -64,7 +62,6 @@ def save_db(full_db):
     key, bin_id = get_secrets()
     if key and bin_id:
         try:
-            # 동시성 덮어쓰기 방어막 (Fetch-and-Merge)
             url_get = f"https://api.jsonbin.io/v3/b/{bin_id}/latest"
             headers = {"X-Master-Key": key}
             req = requests.get(url_get, headers=headers)
@@ -86,7 +83,7 @@ def save_db(full_db):
 # ==========================================
 # 2. 테마 및 페이지 세팅
 # ==========================================
-st.set_page_config(page_title="APEX V49.0 - Larry Williams", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="Larry Williams' Investment Method", layout="wide", page_icon="🚀")
 
 if 'full_db' not in st.session_state:
     st.session_state.full_db = load_db()
@@ -121,54 +118,48 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 및 중복접속 차단 파티션 로직
+# 3. 네이티브 로그인 (버그/빈 창 완벽 제거)
 # ==========================================
 url_params = st.query_params
 url_u = url_params.get('u')
 url_sid = url_params.get('sid')
 current_time = time.time()
 
-# [신규] 자동 로그인 및 새로고침 검증 로직
 if url_u and url_sid and 'current_user' not in st.session_state:
     record = active_users.get(url_u)
     if record:
         if record['sid'] == url_sid:
-            # 내 세션이 맞음 (새로고침 통과)
             st.session_state.current_user = url_u
             st.session_state.session_id = url_sid
         else:
-            # 다른 기기에서 접근 시도
             if current_time - record['last_seen'] < TIMEOUT_SECONDS:
                 st.error(f"⚠️ '{url_u}' 님은 이미 다른 기기(또는 브라우저)에서 접속 중입니다.")
                 st.info("비정상 종료 시 90초 후에 다시 시도해 주십시오.")
                 st.stop()
             else:
-                # 90초 지났으면 죽은 세션으로 간주, 탈취 허용
                 st.session_state.current_user = url_u
                 st.session_state.session_id = url_sid
     else:
-        # 최초 자동 로그인
         st.session_state.current_user = url_u
         st.session_state.session_id = url_sid
 
 # --- 로그인 화면 (세션이 없을 때만 표시) ---
 if 'current_user' not in st.session_state:
-    st.markdown("<br><br><h1 style='text-align:center;'>🇺🇸 Larry Williams' Investment Method</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center; color:{muted_text};'>자신만의 트레이더 닉네임(한글/영문 1~8자)을 입력하여 개인 관제탑을 엽니다.<br>비밀번호는 없으나 중복 접속은 차단됩니다.</p>", unsafe_allow_html=True)
+    st.markdown("<br><br><h1 style='text-align:center;'>🚀 Larry Williams' Investment Method</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align:center; color:{muted_text};'>자신만의 트레이더 닉네임(1~8자)을 입력하여 개인 관제탑을 엽니다.<br>비밀번호는 없으나 중복 접속은 차단됩니다.</p><br>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown(f"<div style='background:{card_bg}; padding:30px; border-radius:15px; border:1px solid {border_color};'>", unsafe_allow_html=True)
-        login_name = st.text_input("트레이더 닉네임 (별명)", max_chars=8, placeholder="예: 무적단타, Admin")
+        # 쓸데없는 HTML 껍데기 제거하고 순수하게 텍스트 입력창만 띄움
+        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="여기에 닉네임을 입력하세요 (예: 워런버핏)")
         
         if st.button("관제탑 입장하기", type="primary", use_container_width=True):
             if 1 <= len(login_name) <= 8:
                 rec = active_users.get(login_name)
-                # 누군가 이미 이 닉네임으로 90초 이내에 활동했다면 차단!
                 if rec and (current_time - rec['last_seen'] < TIMEOUT_SECONDS):
-                    st.error(f"⚠️ '{login_name}' 님은 이미 다른 기기에서 접속 중입니다. (비정상 종료 시 90초 후 재시도)")
+                    st.error(f"⚠️ '{login_name}' 님은 이미 다른 기기에서 접속 중입니다.")
                 else:
-                    new_sid = str(uuid.uuid4())[:8] # 나만의 고유 입장권 발급
+                    new_sid = str(uuid.uuid4())[:8]
                     if login_name not in st.session_state.full_db["users"]:
                         st.session_state.full_db["users"][login_name] = {
                             "favorites": [], "paper_trades": [], 
@@ -176,30 +167,14 @@ if 'current_user' not in st.session_state:
                         }
                         save_db(st.session_state.full_db)
                     
-                    # 브라우저에 쿠키(LocalStorage) 저장 후 리다이렉트
-                    js_code = f"""
-                    <script>
-                        localStorage.setItem('apex_user', '{login_name}');
-                        localStorage.setItem('apex_sid', '{new_sid}');
-                        window.parent.location.href = window.parent.location.pathname + '?u={login_name}&sid={new_sid}';
-                    </script>
-                    """
-                    components.html(js_code, height=0)
+                    # [해결] 자바스크립트 리다이렉트 완전 폐기. 파이썬 네이티브(st.rerun)로 즉시 접속
+                    st.session_state.current_user = login_name
+                    st.session_state.session_id = new_sid
+                    st.query_params["u"] = login_name
+                    st.query_params["sid"] = new_sid
+                    st.rerun()
             else:
                 st.error("닉네임은 1자에서 8자 사이로 입력해주세요.")
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-    auto_login_js = """
-    <script>
-        const user = localStorage.getItem('apex_user');
-        const sid = localStorage.getItem('apex_sid');
-        const urlParams = new URLSearchParams(window.parent.location.search);
-        if (user && sid && (!urlParams.has('u') || !urlParams.has('sid'))) {
-            window.parent.location.href = window.parent.location.pathname + "?u=" + encodeURIComponent(user) + "&sid=" + encodeURIComponent(sid);
-        }
-    </script>
-    """
-    components.html(auto_login_js, height=0)
     st.stop()
 
 # ==========================================
@@ -208,7 +183,6 @@ if 'current_user' not in st.session_state:
 current_u = st.session_state.current_user
 current_sid = st.session_state.session_id
 
-# 생존 신고 (Heartbeat) - 새로고침할 때마다 현재 시간을 갱신하여 방을 잠금 유지
 active_users[current_u] = {"sid": current_sid, "last_seen": time.time()}
 
 u_data = st.session_state.full_db["users"][current_u]
@@ -234,10 +208,12 @@ with st.sidebar:
     """, unsafe_allow_html=True)
     
     if st.button("🚪 안전하게 로그아웃", use_container_width=True):
-        if current_u in active_users: del active_users[current_u] # 명시적 로그아웃 시 즉시 방 개방
-        logout_js = """<script>localStorage.removeItem('apex_user'); localStorage.removeItem('apex_sid'); window.parent.location.href = window.parent.location.pathname;</script>"""
-        components.html(logout_js, height=0)
-        st.stop()
+        if current_u in active_users: del active_users[current_u]
+        # 파이썬 네이티브 로그아웃 처리
+        del st.session_state.current_user
+        del st.session_state.session_id
+        st.query_params.clear()
+        st.rerun()
     
     st.divider()
     st.header("⭐ 관심종목 관리")
@@ -604,7 +580,6 @@ with tab3:
 
 st.divider()
 
-# 스무스 싱크용 히든 버튼 & 60초 생존 신고(하트비트) 발송
 st.button("refresh", key="auto_refresh", help="hidden_refresh")
 st.markdown("""<style>div[data-testid="stButton"]:has(button[title="hidden_refresh"]) { display: none !important; }</style>""", unsafe_allow_html=True)
 timer_js = f"""<script>let t = 60; setInterval(() => {{ t--; if(t<=0) {{ t=60; const btn = window.parent.document.querySelector('button[title="hidden_refresh"]'); if(btn) btn.click(); }} }}, 1000);</script>"""
