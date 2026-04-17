@@ -32,7 +32,7 @@ def get_secrets():
     try:
         if "JSONBIN_KEY" in st.secrets and "JSONBIN_ID" in st.secrets:
             return st.secrets["JSONBIN_KEY"], st.secrets["JSONBIN_ID"]
-    except: pass
+    except Exception: pass
     return None, None
 
 def load_db():
@@ -45,13 +45,13 @@ def load_db():
             req = requests.get(url, headers=headers)
             if req.status_code == 200:
                 db_data = req.json().get("record", {})
-        except: pass
+        except Exception: pass
     
     if not db_data and os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
                 db_data = json.load(f)
-        except: pass
+        except Exception: pass
 
     if "users" not in db_data:
         old_data = db_data.copy()
@@ -75,7 +75,7 @@ def save_db(full_db):
             url_put = f"https://api.jsonbin.io/v3/b/{bin_id}"
             headers_put = {"Content-Type": "application/json", "X-Master-Key": key}
             requests.put(url_put, json=full_db, headers=headers_put)
-        except: pass
+        except Exception: pass
 
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(full_db, f, ensure_ascii=False, indent=4)
@@ -118,7 +118,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 네이티브 로그인 (버그/빈 창 완벽 제거)
+# 3. 네이티브 로그인
 # ==========================================
 url_params = st.query_params
 url_u = url_params.get('u')
@@ -150,9 +150,8 @@ if 'current_user' not in st.session_state:
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # 쓸데없는 HTML 껍데기 제거하고 순수하게 텍스트 입력창만 띄움
-        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="여기에 닉네임을 입력하세요 (예: 워런버핏)")
-        
+        login_name = st.text_input("트레이더 닉네임", max_chars=8, placeholder="여기에 닉네임을 입력하세요 (예: 워런버핏)", label_visibility="collapsed")
+        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("관제탑 입장하기", type="primary", use_container_width=True):
             if 1 <= len(login_name) <= 8:
                 rec = active_users.get(login_name)
@@ -167,7 +166,6 @@ if 'current_user' not in st.session_state:
                         }
                         save_db(st.session_state.full_db)
                     
-                    # [해결] 자바스크립트 리다이렉트 완전 폐기. 파이썬 네이티브(st.rerun)로 즉시 접속
                     st.session_state.current_user = login_name
                     st.session_state.session_id = new_sid
                     st.query_params["u"] = login_name
@@ -209,7 +207,6 @@ with st.sidebar:
     
     if st.button("🚪 안전하게 로그아웃", use_container_width=True):
         if current_u in active_users: del active_users[current_u]
-        # 파이썬 네이티브 로그아웃 처리
         del st.session_state.current_user
         del st.session_state.session_id
         st.query_params.clear()
@@ -224,6 +221,7 @@ with st.sidebar:
     with col_btn:
         search_submit = st.button("추가", use_container_width=True)
         
+    # [버그 해결] st.rerun() 에러 캐칭 우회 (Exception 필터링)
     if search_submit and new_search_ticker:
         if "." in new_search_ticker: st.error("미장 종목만 가능")
         elif new_search_ticker in u_favs: st.warning("이미 등록됨")
@@ -232,12 +230,13 @@ with st.sidebar:
                  try:
                      test_df = yf.Ticker(new_search_ticker).history(period="1d")
                      if not test_df.empty:
-                         u_favs.append(new_search_ticker)
+                         u_favs.append(str(new_search_ticker))
                          sync_and_save()
                          st.success(f"{new_search_ticker} 추가!")
                          st.rerun()
                      else: st.error("없는 티커입니다.")
-                 except: st.error("검증 실패.")
+                 except Exception as e: 
+                     st.error("검증 실패. API 통신 오류일 수 있습니다.")
     
     SECTORS = {
         "🌟 Big Tech": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA", "NFLX", "ADBE", "CRM"],
@@ -285,7 +284,7 @@ def get_macro_indices():
             df = yf.Ticker(ticker).history(period="2d")
             curr, prev = df['Close'].iloc[-1], df['Close'].iloc[-2]
             data[name] = {"price": curr, "pct": ((curr - prev) / prev) * 100}
-        except: data[name] = {"price": 0, "pct": 0}
+        except Exception: data[name] = {"price": 0, "pct": 0}
     return data
 
 def get_market_time():
@@ -364,7 +363,7 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
                     if isinstance(cal, dict) and 'Earnings Date' in cal and len(cal['Earnings Date']) > 0:
                         e_date = cal['Earnings Date'][0]
                         if isinstance(e_date, datetime) and 0 <= (e_date.date() - now.date()).days <= 7: is_earnings_danger = True
-                except: pass
+                except Exception: pass
             
             dist_pct_str = f"{((target - current) / current) * 100:.1f}%"
             if not is_bull or is_gap_danger or is_earnings_danger: status_lamp = "🔴 불가"; dist_pct_str = "-"
@@ -399,7 +398,7 @@ def get_ranking_data(tickers, k, allocated_budget, gap_limit, sl_pct, base_rr):
                 "권장수량": int(allocated_budget / target) if status_lamp in ["🟢 진입", "🟡 대기"] else 0,
                 "추천점수": score, "엔진판단": " ".join(reasons)
             })
-        except: continue
+        except Exception: continue
         
     if not results: return pd.DataFrame(columns=default_columns), []
     df_res = pd.DataFrame(results)
@@ -492,12 +491,13 @@ with tab1:
             with c_b1: 
                 if st.button("⭐ 관심" if not is_f else "❌ 해제", key=f"b1_{focus}"):
                     if is_f: u_favs.remove(focus)
-                    else: u_favs.append(focus)
+                    else: u_favs.append(str(focus))
                     sync_and_save(); st.rerun()
             with c_b2:
                 if st.button("🎮 가상 매수", type="primary", key=f"b2_{focus}"):
-                    if row['권장수량'] > 0: 
-                        u_trades.append({"티커":focus, "종목명":row['종목명'], "진입가":row['현재가_수치'], "수량":row['권장수량'], "목표가":row['익절가격'], "손절가":row['손절가격'], "Bailout":row['Bailout'], "진입시간":datetime.now().strftime("%m-%d %H:%M")})
+                    if row['권장수량'] > 0:
+                        # [버그 해결] Json Type 에러 방지를 위해 강제 형변환(Casting) 주입
+                        u_trades.append({"티커":str(focus), "종목명":str(row['종목명']), "진입가":float(row['현재가_수치']), "수량":int(row['권장수량']), "목표가":float(row['익절가격']), "손절가":float(row['손절가격']), "Bailout":float(row['Bailout']), "진입시간":datetime.now(pytz.timezone('Asia/Seoul')).strftime("%m-%d %H:%M")})
                         sync_and_save(); st.success("체결됨!")
                     else: st.error("금지 구간")
             st.plotly_chart(draw_chart(row), use_container_width=True, key=f"c1_{focus}", config={'displayModeBar': False})
@@ -521,7 +521,8 @@ with tab2:
             with c_fb2:
                 if st.button("🎮 가상 매수", key=f"fb2_{f_foc}", type="primary"):
                     if f_row['권장수량'] > 0: 
-                        u_trades.append({"티커":f_foc, "종목명":f_row['종목명'], "진입가":row['현재가_수치'], "수량":f_row['권장수량'], "목표가":f_row['익절가격'], "손절가":f_row['손절가격'], "Bailout":f_row['Bailout'], "진입시간":datetime.now().strftime("%m-%d %H:%M")})
+                        # [버그 해결] Json Type 에러 방지용 형변환
+                        u_trades.append({"티커":str(f_foc), "종목명":str(f_row['종목명']), "진입가":float(f_row['현재가_수치']), "수량":int(f_row['권장수량']), "목표가":float(f_row['익절가격']), "손절가":float(f_row['손절가격']), "Bailout":float(f_row['Bailout']), "진입시간":datetime.now().strftime("%m-%d %H:%M")})
                         sync_and_save(); st.success("체결됨!")
                     else: st.error("조건 미달")
             st.plotly_chart(draw_chart(f_row), use_container_width=True, key=f"c2_{f_foc}", config={'displayModeBar': False})
@@ -537,7 +538,7 @@ with tab3:
             pdf = pd.DataFrame(u_trades)
             for t in pdf['티커'].unique():
                 try: pdf.loc[pdf['티커']==t, '현재'] = yf.Ticker(t).history(period="1d")['Close'].iloc[-1]
-                except: pdf.loc[pdf['티커']==t, '현재'] = 0
+                except Exception: pdf.loc[pdf['티커']==t, '현재'] = 0
             pdf['수익($)'] = (pdf['현재'] - pdf['진입가']) * pdf['수량']
             pdf['수익률(%)'] = ((pdf['현재'] - pdf['진입가']) / pdf['진입가']) * 100
             pnl = pdf['수익($)'].sum()
@@ -566,7 +567,7 @@ with tab3:
                     curr_price = yf.Ticker(trd["티커"]).history(period="1d")['Close'].iloc[-1]
                     u_pnl += (curr_price - trd["진입가"]) * trd["수량"]
                     u_invested += trd["진입가"] * trd["수량"]
-                except: pass
+                except Exception: pass
                 
             u_pct = (u_pnl / u_invested) * 100 if u_invested > 0 else 0
             leaderboard.append({"트레이더": uname, "총 수익금": u_pnl, "수익률": u_pct})
@@ -580,6 +581,7 @@ with tab3:
 
 st.divider()
 
+# 스무스 싱크용 히든 버튼 & 60초 생존 신고(하트비트) 발송
 st.button("refresh", key="auto_refresh", help="hidden_refresh")
 st.markdown("""<style>div[data-testid="stButton"]:has(button[title="hidden_refresh"]) { display: none !important; }</style>""", unsafe_allow_html=True)
 timer_js = f"""<script>let t = 60; setInterval(() => {{ t--; if(t<=0) {{ t=60; const btn = window.parent.document.querySelector('button[title="hidden_refresh"]'); if(btn) btn.click(); }} }}, 1000);</script>"""
