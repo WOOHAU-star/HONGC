@@ -17,8 +17,8 @@ import time
 DB_FILE = "apex_database.json"
 
 # 여기에 매니저님의 실제 키를 직접 입력하십시오 (따옴표 유지)
-MY_JSONBIN_KEY = "st.secrets.get"("JSONBIN_KEY")
-MY_JSONBIN_ID = "st.secrets.get"("JSONBIN_ID")
+MY_JSONBIN_KEY = st.secrets.get("JSONBIN_KEY")
+MY_JSONBIN_ID = st.secrets.get("JSONBIN_ID")
 
 # ==========================================
 # 2. 딥러닝급 무결점 데이터 세탁기
