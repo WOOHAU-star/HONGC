@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -12,17 +11,12 @@ import uuid
 import time
 
 # ==========================================
-# [중요] 1. 환경 설정 및 키 입력
+# 1. 환경 설정 및 키 입력
 # ==========================================
 DB_FILE = "apex_database.json"
-
-# 여기에 매니저님의 실제 키를 직접 입력하십시오 (따옴표 유지)
 MY_JSONBIN_KEY = st.secrets.get("JSONBIN_KEY")
 MY_JSONBIN_ID = st.secrets.get("JSONBIN_ID")
 
-# ==========================================
-# 2. 딥러닝급 무결점 데이터 세탁기
-# ==========================================
 class TacticalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, (np.integer, np.floating)): return float(obj)
@@ -32,7 +26,7 @@ class TacticalEncoder(json.JSONEncoder):
 def load_db():
     key, bin_id = MY_JSONBIN_KEY, MY_JSONBIN_ID
     db = {"users": {"Admin": {"favorites": [], "settings": {"fixed_k": 0.5, "stop_loss_pct": 4.0, "base_rr_ratio": 2.0}}}}
-    if key and bin_id and "입력" not in key:
+    if key and bin_id:
         try:
             req = requests.get(f"https://api.jsonbin.io/v3/b/{bin_id}/latest", headers={"X-Master-Key": key}, timeout=5)
             if req.status_code == 200: db = req.json().get("record", db)
@@ -46,7 +40,7 @@ def load_db():
 def save_db(full_db):
     key, bin_id = MY_JSONBIN_KEY, MY_JSONBIN_ID
     current_u = st.session_state.get("current_user")
-    if key and bin_id and current_u and "입력" not in key:
+    if key and bin_id and current_u:
         try:
             req_get = requests.get(f"https://api.jsonbin.io/v3/b/{bin_id}/latest", headers={"X-Master-Key": key}, timeout=5)
             if req_get.status_code == 200:
@@ -59,9 +53,9 @@ def save_db(full_db):
     with open(DB_FILE, "w", encoding="utf-8") as f: json.dump(full_db, f, indent=4, cls=TacticalEncoder)
 
 # ==========================================
-# 3. UI 및 모바일 반응형 CSS (Mobile Responsive)
+# 2. UI 및 모바일 반응형 CSS
 # ==========================================
-st.set_page_config(page_title="APEX V61.0", layout="wide")
+st.set_page_config(page_title="APEX V62.0", layout="wide")
 if 'full_db' not in st.session_state: st.session_state.full_db = load_db()
 
 st.markdown("""
@@ -70,10 +64,9 @@ st.markdown("""
     html, body, [class*="css"] { font-family: 'Pretendard', sans-serif !important; background-color: #0b0e14; color: #e2e8f0; }
     .stApp { background-color: #0b0e14; }
     
-    /* 네온 경고창 */
     .neon-alert { background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; border-radius: 8px; padding: 12px; text-align: center; color: #fca5a5; font-weight: 800; margin-bottom: 15px; font-size: 14px; }
+    .global-hit { background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; border-radius: 8px; padding: 12px; text-align: center; color: #6ee7b7; font-weight: 800; margin-bottom: 15px; }
     
-    /* 모바일 반응형 정보창 (스마트폰에서 세로로 예쁘게 정렬됨) */
     .vip-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; background: #151921; padding: 15px; border-radius: 12px; border: 1px solid #232e4a; margin-top: 10px; margin-bottom: 10px; }
     .vip-title { font-size: 24px; font-weight: 900; color: #3b82f6; margin: 0; min-width: 100px; }
     .vip-data-group { display: flex; flex-wrap: wrap; gap: 15px; }
@@ -85,18 +78,16 @@ st.markdown("""
         .vip-header { flex-direction: column; align-items: flex-start; gap: 15px; }
         .vip-data-group { justify-content: space-between; width: 100%; }
     }
-    
-    .ticker-wrap { width: 100%; overflow: hidden; background: #070a12; padding: 5px 0; margin-bottom: 10px; }
     div[data-testid="stButton"] button[kind="primary"] { background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%); color: white; font-weight: 900; border: none; border-radius: 8px; }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 4. 로그인 로직
+# 3. 로그인 로직 (자동 로그아웃 원인 제거)
 # ==========================================
 if 'current_user' not in st.session_state:
     st.markdown("<br><br><h1 style='text-align:center;'>APEX <span style='color:#3b82f6;'>RADAR</span></h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#64748b; font-size:14px;'>MOBILE SYNC ENABLED</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#64748b; font-size:14px;'>SECURE LOGIN</p>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         uid = st.text_input("ENTER CALLSIGN", max_chars=8)
@@ -113,7 +104,7 @@ u_name = st.session_state.current_user
 u_data = st.session_state.full_db["users"][u_name]
 
 # ==========================================
-# 5. 10개 테마 200개 종목 데이터 복구
+# 4. 200개 종목 데이터 베이스
 # ==========================================
 SECTORS = {
     "⭐ 내 관심종목 (Favorites)": u_data['favorites'],
@@ -130,7 +121,7 @@ SECTORS = {
 }
 
 # ==========================================
-# 6. 프로급 차트 엔진
+# 5. 차트 엔진
 # ==========================================
 def draw_pure_chart(ticker, target, tp, sl):
     try:
@@ -170,42 +161,77 @@ def draw_pure_chart(ticker, target, tp, sl):
     except Exception as e: return None
 
 # ==========================================
-# 7. 스캐닝 로직
+# 6. 터보 스캔 엔진 (Bulk Download 적용)
 # ==========================================
 @st.cache_data(ttl=60)
-def scan_engine(tickers, k, sl_p):
+def turbo_scan_engine(tickers, k, sl_p):
+    if not tickers: return pd.DataFrame()
     res = []
-    for t in tickers:
-        try:
-            s = yf.Ticker(t); df = s.history(period="40d")
-            if len(df) < 20: continue
-            yest, today = df.iloc[-2], df.iloc[-1]
-            curr, op = float(today['Close']), float(today['Open'])
-            ma5 = float(df['Close'].rolling(5).mean().iloc[-1])
-            target = op + ((float(yest['High'] - yest['Low'])) * k)
-            sl = target * (1 - sl_p/100)
-            tp = target + (target - sl) * 2.0
-            sig = "🎯 BUY" if curr >= target and op > ma5 else "👀 WATCH"
-            if op <= ma5: sig = "❄️ WAIT"
-            res.append({"Ticker": t, "Price": curr, "Chg": ((curr-df['Close'].iloc[-2])/df['Close'].iloc[-2])*100, "Signal": sig, "Target": target, "TP": tp, "SL": sl})
-        except: continue
+    try:
+        # yfinance 대량 다운로드 (200개 종목을 3초 안에 수집)
+        df_all = yf.download(tickers, period="40d", group_by='ticker', threads=True, progress=False)
+        
+        for t in tickers:
+            try:
+                # 1개일 때와 여러 개일 때의 데이터 구조 차이 방어
+                df = df_all if len(tickers) == 1 else df_all[t]
+                df = df.dropna()
+                
+                if len(df) < 20: continue
+                
+                yest, today = df.iloc[-2], df.iloc[-1]
+                curr, op = float(today['Close']), float(today['Open'])
+                ma5 = float(df['Close'].rolling(5).mean().iloc[-1])
+                target = op + ((float(yest['High'] - yest['Low'])) * k)
+                sl = target * (1 - sl_p/100)
+                tp = target + (target - sl) * 2.0
+                
+                sig = "🎯 BUY" if curr >= target and op > ma5 else "👀 WATCH"
+                if op <= ma5: sig = "❄️ WAIT"
+                
+                prev_c = float(yest['Close'])
+                chg = ((curr - prev_c) / prev_c) * 100
+                res.append({"Ticker": t, "Price": curr, "Chg": chg, "Signal": sig, "Target": target, "TP": tp, "SL": sl})
+            except: continue
+    except: pass
     return pd.DataFrame(res)
 
 # ==========================================
-# 8. 메인 렌더링
+# 7. 메인 렌더링 (Global Hits + Theme Selector)
 # ==========================================
-sel_sec = st.selectbox("📂 10개 테마 스캐너 (200종목)", list(SECTORS.keys()), label_visibility="collapsed")
 
-if not SECTORS[sel_sec]:
-    st.info("사이드바에서 관심 종목을 추가하십시오.")
+# --- 1) 전 섹터 타점 도달 브리핑 ---
+st.markdown("### 🔥 전체 테마 타점 도달 브리핑")
+all_tickers_set = list(set([t for theme_tickers in SECTORS.values() for t in theme_tickers if t]))
+
+with st.spinner("전체 200개 종목을 스캔 중입니다... (최초 1회 약 3초 소요)"):
+    df_global = turbo_scan_engine(all_tickers_set, float(u_data['settings']['fixed_k']), float(u_data['settings']['stop_loss_pct']))
+
+if not df_global.empty:
+    global_hits = df_global[df_global['Signal'] == '🎯 BUY'].copy()
+    if not global_hits.empty:
+        st.markdown(f"<div class='global-hit'>🚀 {len(global_hits)}개 종목이 진입 구간에 도달했습니다!</div>", unsafe_allow_html=True)
+        st.dataframe(global_hits[['Ticker', 'Price', 'Chg', 'Target']], 
+                     column_config={
+                         "Price": st.column_config.NumberColumn("현재가", format="$%.2f"),
+                         "Chg": st.column_config.NumberColumn("등락", format="%.2f%%"),
+                         "Target": st.column_config.NumberColumn("목표 진입가", format="$%.2f")
+                     },
+                     use_container_width=True, hide_index=True)
+    else:
+        st.info("현재 전 섹터에서 타점에 도달한 종목이 없습니다.")
 else:
-    with st.spinner("스캐닝 중... (최대 20개 종목)"):
-        df_res = scan_engine(SECTORS[sel_sec], float(u_data['settings']['fixed_k']), float(u_data['settings']['stop_loss_pct']))
+    st.warning("데이터를 불러오는 중 문제가 발생했습니다.")
+
+st.divider()
+
+# --- 2) 기존 테마별 상세 검색 ---
+sel_sec = st.selectbox("📂 테마별 상세 차트 분석", list(SECTORS.keys()))
+
+if SECTORS[sel_sec]:
+    df_res = turbo_scan_engine(SECTORS[sel_sec], float(u_data['settings']['fixed_k']), float(u_data['settings']['stop_loss_pct']))
     
     if not df_res.empty:
-        hits = df_res[df_res['Signal'] == '🎯 BUY']['Ticker'].tolist()
-        if hits: st.markdown(f"<div class='neon-alert'>🚨 타점 도달 경고: {', '.join(hits)}</div>", unsafe_allow_html=True)
-        
         sel = st.dataframe(df_res[['Ticker', 'Price', 'Chg', 'Signal']], on_select="rerun", selection_mode="single-row",
                            column_config={"Price": st.column_config.NumberColumn(format="$%.2f"), "Chg": st.column_config.NumberColumn(format="%.2f%%")},
                            use_container_width=True, hide_index=True, height=200)
@@ -213,7 +239,6 @@ else:
         idx = sel.selection.rows[0] if sel.selection.rows else 0
         row = df_res.iloc[idx]
         
-        # 모바일 반응형 전광판 (Responsive VIP Header)
         st.markdown(f"""
             <div class="vip-header">
                 <div class="vip-title">{row['Ticker']}</div>
@@ -244,4 +269,4 @@ with st.sidebar:
         if new_t and new_t not in u_data['favorites']:
             u_data['favorites'].append(new_t); save_db(st.session_state.full_db); st.rerun()
 
-components.html("<script>setTimeout(function(){window.parent.location.reload();}, 60000);</script>", height=0)
+# 강제 새로고침 코드 영구 삭제 (10초 로그아웃 버그 해결)
